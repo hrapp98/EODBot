@@ -1,3 +1,11 @@
+from flask import Flask, request, jsonify, render_template
+import logging
+import os
+
+app = Flask(__name__)
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
 import os
 from flask import Flask, request, jsonify, render_template
 import logging
@@ -158,9 +166,11 @@ def verify_slack_request(timestamp, signature, body):
     
     return hmac.compare_digest(my_signature, signature)
 
-@app.route('/')
+@app.route('/', methods=['GET'])
 def index():
     """Show welcome page"""
+    if request.headers.get('Accept') == 'application/json':
+        return jsonify({'status': 'ok'})
     return render_template('index.html')
 
 @app.route('/dashboard')
