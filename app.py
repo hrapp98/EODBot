@@ -3,6 +3,7 @@ from flask import Flask, request, jsonify, render_template
 import logging
 from slack_bot import SlackBot
 from firebase_client import FirebaseClient
+from firebase_admin import firestore
 from datetime import datetime
 import hmac
 import hashlib
@@ -30,19 +31,21 @@ slack_bot = SlackBot()
 firebase_client = None
 
 # Attempt to initialize Firebase client if credentials are available
-if all([
-    Config.FIREBASE_API_KEY,
-    Config.FIREBASE_APP_ID,
-    Config.FIREBASE_PROJECT_ID,
-    Config.FIREBASE_STORAGE_BUCKET
-]):
+if Config.firebase_config_valid():
     try:
+        logger.info("Starting Firebase client initialization...")
         firebase_client = FirebaseClient()
-        logger.info("Firebase client initialized successfully")
+        if firebase_client.db is None:
+            logger.warning("Firebase client not properly initialized - Firestore client is None")
+        else:
+            logger.info("Firebase client initialized successfully with Firestore access")
     except Exception as e:
         logger.error(f"Failed to initialize Firebase client: {str(e)}")
+        firebase_client = None
 else:
-    logger.warning("Firebase configuration incomplete. Some features will be disabled.")
+    missing_vars = [var for var in ['FIREBASE_API_KEY', 'FIREBASE_APP_ID', 'FIREBASE_PROJECT_ID'] 
+                   if not getattr(Config, var)]
+    logger.warning(f"Firebase configuration incomplete. Missing: {', '.join(missing_vars)}")
 
 def verify_slack_request(request):
     """Verify that the request actually came from Slack"""
@@ -82,8 +85,24 @@ def slack_events():
 def dashboard():
     """Render submission status dashboard"""
     try:
-        from models import EODReport
-        reports = EODReport.query.order_by(EODReport.created_at.desc()).limit(10).all()
+        if not firebase_client:
+            return "Firebase client not initialized. Please check configuration.", 500
+            
+        # Get recent reports from Firebase
+        reports = []
+        docs = firebase_client.db.collection('eod_reports')\
+            .order_by('timestamp', direction=firestore.Query.DESCENDING)\
+            .limit(10)\
+            .stream()
+        
+        for doc in docs:
+            data = doc.to_dict()
+            created_at = datetime.fromisoformat(data['timestamp'])
+            reports.append({
+                'user_id': data['user_id'],
+                'created_at': created_at
+            })
+            
         return render_template('dashboard.html', reports=reports)
     except Exception as e:
         logger.error(f"Error loading dashboard: {str(e)}")
@@ -145,10 +164,6 @@ def handle_eod_submission(event):
 if __name__ == '__main__':
     with app.app_context():
         try:
-            logger.info("Creating database tables...")
-            db.create_all()
-            logger.info("Database tables created successfully")
-            
             logger.info("Setting up scheduler...")
             from scheduler import setup_scheduler
             setup_scheduler(app)

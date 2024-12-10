@@ -105,13 +105,36 @@ def sync_to_sheets(app):
         
         # Get today's reports
         start_date = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-        reports = EODReport.query.filter(
-            EODReport.created_at >= start_date
-        ).all()
-        
-        # Update sheets
-        sheets_client.update_submissions(reports)
-        sheets_client.update_tracker()
+        try:
+            from app import firebase_client
+            if firebase_client:
+                # Get reports from Firebase
+                reports = []
+                docs = firebase_client.db.collection('eod_reports')\
+                    .where('timestamp', '>=', start_date)\
+                    .stream()
+                
+                for doc in docs:
+                    data = doc.to_dict()
+                    report = EODReport(
+                        user_id=data['user_id'],
+                        short_term_projects=data.get('short_term_projects', {}),
+                        long_term_projects=data.get('long_term_projects', {}),
+                        accomplishments=data.get('accomplishments', ''),
+                        blockers=data.get('blockers', ''),
+                        next_day_goals=data.get('next_day_goals', ''),
+                        client_interactions=data.get('client_interactions', '')
+                    )
+                    reports.append(report)
+                
+                # Update sheets
+                if reports:
+                    sheets_client.update_submissions(reports)
+                    sheets_client.update_tracker()
+            else:
+                logger.warning("Firebase client not initialized, cannot sync reports")
+        except Exception as e:
+            logger.error(f"Error syncing reports: {str(e)}")
 
 def generate_weekly_summary(app):
     """Generate weekly summary of EOD reports"""
@@ -119,13 +142,37 @@ def generate_weekly_summary(app):
         end_date = datetime.utcnow()
         start_date = end_date - timedelta(days=7)
         
-        # Get reports for the past week
-        reports = EODReport.query.filter(
-            EODReport.created_at.between(start_date, end_date)
-        ).order_by(EODReport.created_at.asc()).all()
-        
-        if not reports:
-            logger.info("No reports found for weekly summary")
+        # Get reports for the past week from Firebase
+        try:
+            from app import firebase_client
+            if not firebase_client:
+                logger.warning("Firebase client not initialized, cannot generate weekly summary")
+                return
+                
+            reports = []
+            docs = firebase_client.db.collection('eod_reports')\
+                .where('timestamp', '>=', start_date)\
+                .where('timestamp', '<=', end_date)\
+                .stream()
+            
+            for doc in docs:
+                data = doc.to_dict()
+                report = EODReport(
+                    user_id=data['user_id'],
+                    short_term_projects=data.get('short_term_projects', {}),
+                    long_term_projects=data.get('long_term_projects', {}),
+                    accomplishments=data.get('accomplishments', ''),
+                    blockers=data.get('blockers', ''),
+                    next_day_goals=data.get('next_day_goals', ''),
+                    client_interactions=data.get('client_interactions', '')
+                )
+                reports.append(report)
+                
+            if not reports:
+                logger.info("No reports found for weekly summary")
+                return
+        except Exception as e:
+            logger.error(f"Error getting weekly reports: {str(e)}")
             return
             
         # Group reports by user
