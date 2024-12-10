@@ -101,11 +101,68 @@ def slack_events():
             handle_app_mention(event)
             
     return jsonify({'status': 'ok'})
+# Slack event handlers
+import time
+import hmac
+import hashlib
+from datetime import datetime
+from google.cloud import firestore
+
+@app.route('/slack/events', methods=['POST'])
+def handle_slack_events():
+    """Handle Slack events and commands"""
+    try:
+        # Verify request signature
+        timestamp = request.headers.get('X-Slack-Request-Timestamp', '')
+        signature = request.headers.get('X-Slack-Signature', '')
+        
+        # Verify the request
+        if not verify_slack_request(timestamp, signature, request.get_data()):
+            logger.warning("Invalid Slack request signature")
+            return jsonify({'error': 'invalid_signature'}), 401
+        
+        # Parse the event data
+        data = request.json
+        
+        # Handle URL verification
+        if data.get('type') == 'url_verification':
+            return jsonify({'challenge': data['challenge']})
+            
+        # Handle events
+        if data.get('type') == 'event_callback':
+            event = data.get('event', {})
+            event_type = event.get('type')
+            
+            if event_type == 'message':
+                handle_message(event)
+            elif event_type == 'app_mention':
+                handle_app_mention(event)
+                
+        return jsonify({'status': 'ok'})
+        
+    except Exception as e:
+        logger.error(f"Error handling Slack event: {str(e)}")
+        return jsonify({'error': 'internal_error'}), 500
+
+def verify_slack_request(timestamp, signature, body):
+    """Verify Slack request signature"""
+    if abs(time.time() - int(timestamp)) > 60 * 5:
+        return False
+        
+    sig_basestring = f"v0:{timestamp}:{body.decode('utf-8')}"
+    my_signature = 'v0=' + hmac.new(
+        Config.SLACK_SIGNING_SECRET.encode(),
+        sig_basestring.encode(),
+        hashlib.sha256
+    ).hexdigest()
+    
+    return hmac.compare_digest(my_signature, signature)
 
 @app.route('/')
 def index():
-    """Redirect to dashboard"""
+    """Show welcome page"""
     return render_template('index.html')
+
 @app.route('/dashboard')
 def dashboard():
     """Render submission status dashboard"""

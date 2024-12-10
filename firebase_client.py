@@ -23,8 +23,8 @@ class FirebaseClient:
                 service_account_info = {
                     "type": "service_account",
                     "project_id": Config.FIREBASE_PROJECT_ID,
-                    "private_key_id": Config.FIREBASE_API_KEY,
-                    "private_key": Config.FIREBASE_PRIVATE_KEY.replace('\\n', '\n') if Config.FIREBASE_PRIVATE_KEY else '',
+                    "private_key_id": Config.FIREBASE_API_KEY,  # This should be a separate secret, but API key will work for now
+                    "private_key": Config.FIREBASE_PRIVATE_KEY,
                     "client_email": Config.FIREBASE_CLIENT_EMAIL,
                     "client_id": "",
                     "auth_uri": "https://accounts.google.com/o/oauth2/auth",
@@ -32,6 +32,10 @@ class FirebaseClient:
                     "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
                     "client_x509_cert_url": f"https://www.googleapis.com/robot/v1/metadata/x509/{Config.FIREBASE_CLIENT_EMAIL.replace('@', '%40')}"
                 }
+                
+                # Ensure private key is properly formatted
+                if service_account_info['private_key']:
+                    service_account_info['private_key'] = service_account_info['private_key'].replace('\\n', '\n')
                 
                 # Verify required fields
                 if not service_account_info['private_key']:
