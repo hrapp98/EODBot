@@ -37,3 +37,15 @@ class FirebaseClient:
         submitted_users = set(doc.get('user_id') for doc in query.stream())
         # Note: In production, we'd compare this against a list of all users
         return submitted_users
+
+    def save_tracker(self, tracker_data):
+        """Save submission tracker to Firebase"""
+        doc_ref = self.db.collection('submission_trackers').document()
+        doc_ref.set(tracker_data)
+        return doc_ref.id
+
+    def get_tracker(self, user_id, date):
+        """Get tracker for a specific user and date"""
+        query = self.db.collection('submission_trackers').where('user_id', '==', user_id).where('date', '==', date)
+        docs = list(query.stream())
+        return docs[0].to_dict() if docs else None

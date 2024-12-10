@@ -7,7 +7,6 @@ from datetime import datetime
 import hmac
 import hashlib
 from config import Config
-from extensions import db
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -18,21 +17,6 @@ def create_app():
         logger.info("Creating Flask application...")
         app = Flask(__name__)
         app.secret_key = Config.FLASK_SECRET_KEY
-        
-        # Configure database
-        logger.info("Configuring database...")
-        if not Config.SQLALCHEMY_DATABASE_URI:
-            logger.error("DATABASE_URL environment variable is not set")
-            raise ValueError("DATABASE_URL environment variable is not set")
-        
-        logger.info(f"Database URL format: {Config.SQLALCHEMY_DATABASE_URI.split('@')[0].split(':')[0]}://****")
-        app.config['SQLALCHEMY_DATABASE_URI'] = Config.SQLALCHEMY_DATABASE_URI
-        app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-        
-        # Initialize extensions
-        logger.info("Initializing database extension...")
-        db.init_app(app)
-        
         logger.info("Application creation successful")
         return app
     except Exception as e:
@@ -142,8 +126,13 @@ def handle_eod_submission(event):
         # Create and save EOD report
         from models import EODReport
         report = EODReport.create_from_text(user_id, text)
-        db.session.add(report)
-        db.session.commit()
+        # Save report to Firebase
+        if firebase_client:
+            try:
+                firebase_client.save_eod_report(report.user_id, report.to_dict())
+            except Exception as e:
+                logger.error(f"Failed to save report to Firebase: {str(e)}")
+                raise
         
         # Post to Slack channel
         slack_bot.post_report_to_channel(report.to_dict())

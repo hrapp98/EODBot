@@ -5,10 +5,11 @@ class Config:
     # Flask
     FLASK_SECRET_KEY = os.environ.get('FLASK_SECRET_KEY', 'dev-secret-key')
     
-    # Database
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL')
-    if SQLALCHEMY_DATABASE_URI and SQLALCHEMY_DATABASE_URI.startswith('postgres://'):
-        SQLALCHEMY_DATABASE_URI = SQLALCHEMY_DATABASE_URI.replace('postgres://', 'postgresql://', 1)
+    # Firebase Configuration
+    FIREBASE_API_KEY = os.environ.get('FIREBASE_API_KEY')
+    FIREBASE_APP_ID = os.environ.get('FIREBASE_APP_ID')
+    FIREBASE_PROJECT_ID = os.environ.get('FIREBASE_PROJECT_ID')
+    FIREBASE_STORAGE_BUCKET = os.environ.get('FIREBASE_STORAGE_BUCKET')
     
     # Firebase
     FIREBASE_API_KEY = os.environ.get('FIREBASE_API_KEY')

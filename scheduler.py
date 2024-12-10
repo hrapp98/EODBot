@@ -68,37 +68,35 @@ def send_reminders(app):
         end_date = datetime.utcnow()
         start_date = end_date.replace(hour=0, minute=0, second=0, microsecond=0)
         
-        # Get users who submitted today
-        submitted_users = set(
-            report.user_id for report in EODReport.query.filter(
-                EODReport.created_at.between(start_date, end_date)
-            ).all()
-        )
+        # Get users who submitted today from Firebase
+        try:
+            from app import firebase_client
+            if firebase_client:
+                submitted_users = firebase_client.get_missing_reports(start_date)
+            else:
+                logger.warning("Firebase client not initialized, cannot check submissions")
+                submitted_users = set()
+        except Exception as e:
+            logger.error(f"Error getting submitted users: {str(e)}")
+            submitted_users = set()
         
         # Send reminders to users who haven't submitted
         for user_id in active_users:
             if user_id not in submitted_users:
                 slack_bot.send_reminder(user_id)
                 
-                # Update or create tracker entry
-                from models import SubmissionTracker
-                tracker = SubmissionTracker.query.filter_by(
+                # Update submission tracker in Firebase
+                tracker = SubmissionTracker(
                     user_id=user_id,
-                    date=datetime.utcnow().date()
-                ).first()
+                    date=datetime.utcnow().date(),
+                    reminder_count=1
+                )
                 
-                if tracker:
-                    tracker.reminder_count += 1
-                else:
-                    tracker = SubmissionTracker(
-                        user_id=user_id,
-                        date=datetime.utcnow().date(),
-                        reminder_count=1
-                    )
-                    
-                from extensions import db
-                db.session.add(tracker)
-                db.session.commit()
+                if firebase_client:
+                    try:
+                        firebase_client.save_tracker(tracker.to_dict())
+                    except Exception as e:
+                        logger.error(f"Failed to save tracker to Firebase: {str(e)}")
 
 def sync_to_sheets(app):
     """Sync reports to Google Sheets"""

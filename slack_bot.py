@@ -1,6 +1,7 @@
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from config import Config
+from datetime import datetime
 import logging
 
 logger = logging.getLogger(__name__)
@@ -93,6 +94,21 @@ class SlackBot:
             )
         except SlackApiError as e:
             logger.error(f"Error sending message: {e.response['error']}")
+            
+    def send_status_update(self, user_id):
+        """Send status update to user"""
+        try:
+            from models import EODReport
+            today_report = EODReport.query.filter_by(
+                user_id=user_id,
+                created_at=datetime.utcnow().date()
+            ).first()
+            
+            status = "You have submitted your EOD report for today." if today_report else "You haven't submitted your EOD report for today yet."
+            self.send_message(user_id, status)
+        except Exception as e:
+            logger.error(f"Error sending status update: {str(e)}")
+            self.send_message(user_id, "Sorry, I couldn't fetch your status right now.")
     
     def send_help_message(self, user_id):
         """Send help message with bot instructions"""

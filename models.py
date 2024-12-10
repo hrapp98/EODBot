@@ -1,34 +1,27 @@
-from extensions import db
 from datetime import datetime
-from sqlalchemy.dialects.postgresql import JSON
+import logging
 
-class EODReport(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.String(50), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    # Project data
-    short_term_projects = db.Column(JSON)
-    long_term_projects = db.Column(JSON)
-    
-    # Progress tracking
-    short_term_progress = db.Column(db.Integer)  # Percentage
-    long_term_progress = db.Column(db.Integer)  # Percentage
-    
-    # Additional fields
-    accomplishments = db.Column(db.Text)
-    blockers = db.Column(db.Text)
-    next_day_goals = db.Column(db.Text)
-    client_interactions = db.Column(db.Text)
-    
-    # Metadata
-    submitted = db.Column(db.Boolean, default=True)
-    reminder_sent = db.Column(db.Boolean, default=False)
-    
+logger = logging.getLogger(__name__)
+
+class EODReport:
+    def __init__(self, user_id, short_term_projects=None, long_term_projects=None,
+                 accomplishments=None, blockers=None, next_day_goals=None,
+                 client_interactions=None):
+        self.id = None  # Will be set by Firebase
+        self.user_id = user_id
+        self.created_at = datetime.utcnow()
+        self.short_term_projects = short_term_projects or {}
+        self.long_term_projects = long_term_projects or {}
+        self.accomplishments = accomplishments
+        self.blockers = blockers
+        self.next_day_goals = next_day_goals
+        self.client_interactions = client_interactions
+        self.submitted = True
+        self.reminder_sent = False
+
     @classmethod
     def create_from_text(cls, user_id, text):
         """Parse EOD report text and create report object"""
-        # Simple parsing logic - can be enhanced
         lines = text.split('\n')
         data = {
             'short_term_projects': {},
@@ -72,9 +65,9 @@ class EODReport(db.Model):
             next_day_goals=data['next_day_goals'],
             client_interactions=data['client_interactions']
         )
-    
+
     def to_dict(self):
-        """Convert report to dictionary format"""
+        """Convert report to dictionary format for Firebase"""
         return {
             'user_id': self.user_id,
             'short_term_projects': self.short_term_projects,
@@ -83,16 +76,23 @@ class EODReport(db.Model):
             'blockers': self.blockers,
             'next_day_goals': self.next_day_goals,
             'client_interactions': self.client_interactions,
-            'created_at': self.created_at.isoformat()
+            'created_at': self.created_at.isoformat(),
+            'submitted': self.submitted,
+            'reminder_sent': self.reminder_sent
         }
 
-class SubmissionTracker(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.String(50), nullable=False)
-    date = db.Column(db.Date, nullable=False)
-    submitted = db.Column(db.Boolean, default=False)
-    reminder_count = db.Column(db.Integer, default=0)
-    
-    __table_args__ = (
-        db.UniqueConstraint('user_id', 'date', name='unique_user_date'),
-    )
+class SubmissionTracker:
+    def __init__(self, user_id, date, submitted=False, reminder_count=0):
+        self.user_id = user_id
+        self.date = date
+        self.submitted = submitted
+        self.reminder_count = reminder_count
+
+    def to_dict(self):
+        """Convert tracker to dictionary format for Firebase"""
+        return {
+            'user_id': self.user_id,
+            'date': self.date.isoformat(),
+            'submitted': self.submitted,
+            'reminder_count': self.reminder_count
+        }
