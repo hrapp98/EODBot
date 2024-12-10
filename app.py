@@ -9,15 +9,36 @@ import hmac
 import hashlib
 from config import Config
 
-# Set up logging
-logging.basicConfig(level=logging.DEBUG)
+# Set up logging with more detailed formatting
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 logger = logging.getLogger(__name__)
+
+def setup_logging_middleware(app):
+    """Configure logging middleware for request tracking"""
+    @app.before_request
+    def before_request_logging():
+        logger.debug(f"Incoming {request.method} request to {request.path}")
+        if request.json:
+            logger.debug(f"Request payload: {request.json}")
+
+    @app.after_request
+    def after_request_logging(response):
+        logger.debug(f"Request completed with status {response.status_code}")
+        return response
 
 def create_app():
     try:
         logger.info("Creating Flask application...")
         app = Flask(__name__)
         app.secret_key = Config.FLASK_SECRET_KEY
+        
+        # Set up logging middleware
+        setup_logging_middleware(app)
+        
         logger.info("Application creation successful")
         return app
     except Exception as e:
@@ -81,6 +102,10 @@ def slack_events():
             
     return jsonify({'status': 'ok'})
 
+@app.route('/')
+def index():
+    """Redirect to dashboard"""
+    return render_template('index.html')
 @app.route('/dashboard')
 def dashboard():
     """Render submission status dashboard"""

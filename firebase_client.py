@@ -19,37 +19,33 @@ class FirebaseClient:
                 
                 logger.info("Initializing Firebase client...")
                 
-                # Load and format private key
-                private_key = Config.FIREBASE_APP_ID
-                if not private_key:
-                    logger.error("Firebase private key is missing")
-                    return
-                    
-                # Handle various private key formats
-                if '\\n' in private_key:
-                    private_key = private_key.replace('\\n', '\n')
-                elif r'\n' in private_key:
-                    private_key = private_key.replace(r'\n', '\n')
-                
-                # Create service account info
+                # Create service account info from environment variables
                 service_account_info = {
                     "type": "service_account",
                     "project_id": Config.FIREBASE_PROJECT_ID,
                     "private_key_id": Config.FIREBASE_API_KEY,
-                    "private_key": private_key,
-                    "client_email": f"firebase-adminsdk-{Config.FIREBASE_PROJECT_ID}@{Config.FIREBASE_PROJECT_ID}.iam.gserviceaccount.com",
+                    "private_key": Config.FIREBASE_PRIVATE_KEY.replace('\\n', '\n') if Config.FIREBASE_PRIVATE_KEY else '',
+                    "client_email": Config.FIREBASE_CLIENT_EMAIL,
                     "client_id": "",
                     "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                     "token_uri": "https://oauth2.googleapis.com/token",
                     "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-                    "client_x509_cert_url": f"https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-{Config.FIREBASE_PROJECT_ID}%40{Config.FIREBASE_PROJECT_ID}.iam.gserviceaccount.com"
+                    "client_x509_cert_url": f"https://www.googleapis.com/robot/v1/metadata/x509/{Config.FIREBASE_CLIENT_EMAIL.replace('@', '%40')}"
                 }
                 
-                logger.debug(f"Project ID: {Config.FIREBASE_PROJECT_ID}")
-                logger.debug(f"Private key format check: {private_key.startswith('-----BEGIN PRIVATE KEY-----')}")
+                # Verify required fields
+                if not service_account_info['private_key']:
+                    logger.error("Firebase private key is missing")
+                    return
+                    
+                logger.debug("Firebase service account info validation:")
+                logger.debug(f"- Project ID: {Config.FIREBASE_PROJECT_ID}")
+                logger.debug(f"- Client Email: {Config.FIREBASE_CLIENT_EMAIL}")
+                logger.debug(f"- Private key format: {service_account_info['private_key'].startswith('-----BEGIN PRIVATE KEY-----')}")
                 
+                # Initialize Firebase with credentials
                 try:
-                    logger.debug("Attempting to initialize Firebase with credentials...")
+                    logger.info("Attempting to initialize Firebase with credentials...")
                     cred = credentials.Certificate(service_account_info)
                     firebase_admin.initialize_app(cred)
                     logger.info("Firebase app initialized successfully")
@@ -60,11 +56,14 @@ class FirebaseClient:
                     logger.error(f"Failed to initialize Firebase app: {str(e)}")
                     return
             
+            # Initialize Firestore client
             try:
                 self.db = firestore.client()
-                logger.info("Firestore client initialized successfully")
+                # Verify connection by attempting a simple operation
+                self.db.collection('test').limit(1).get()
+                logger.info("Firestore client initialized and verified successfully")
             except Exception as e:
-                logger.error(f"Failed to initialize Firestore client: {str(e)}")
+                logger.error(f"Failed to initialize or verify Firestore client: {str(e)}")
                 self.db = None
                 
         except Exception as e:
@@ -73,33 +72,74 @@ class FirebaseClient:
 
     def save_eod_report(self, user_id, report_data):
         """Save EOD report to Firebase"""
-        report_data['timestamp'] = datetime.now()
-        doc_ref = self.db.collection('eod_reports').document()
-        doc_ref.set(report_data)
-        return doc_ref.id
+        if not self.db:
+            logger.error("Firebase client not initialized")
+            return None
+            
+        try:
+            report_data['timestamp'] = datetime.now()
+            doc_ref = self.db.collection('eod_reports').document()
+            doc_ref.set(report_data)
+            return doc_ref.id
+        except Exception as e:
+            logger.error(f"Error saving EOD report: {str(e)}")
+            return None
 
     def get_user_reports(self, user_id, date=None):
         """Get EOD reports for a specific user"""
-        query = self.db.collection('eod_reports').where('user_id', '==', user_id)
-        if date:
-            query = query.where('timestamp', '>=', date)
-        return [doc.to_dict() for doc in query.stream()]
+        if not self.db:
+            logger.error("Firebase client not initialized")
+            return []
+            
+        try:
+            query = self.db.collection('eod_reports').where('user_id', '==', user_id)
+            if date:
+                query = query.where('timestamp', '>=', date)
+            return [doc.to_dict() for doc in query.stream()]
+        except Exception as e:
+            logger.error(f"Error getting user reports: {str(e)}")
+            return []
 
     def get_missing_reports(self, date):
         """Get list of users who haven't submitted reports for a given date"""
-        query = self.db.collection('eod_reports').where('timestamp', '>=', date)
-        submitted_users = set(doc.get('user_id') for doc in query.stream())
-        # Note: In production, we'd compare this against a list of all users
-        return submitted_users
+        if not self.db:
+            logger.error("Firebase client not initialized")
+            return set()
+            
+        try:
+            query = self.db.collection('eod_reports').where('timestamp', '>=', date)
+            submitted_users = set(doc.get('user_id') for doc in query.stream())
+            return submitted_users
+        except Exception as e:
+            logger.error(f"Error getting missing reports: {str(e)}")
+            return set()
 
     def save_tracker(self, tracker_data):
         """Save submission tracker to Firebase"""
-        doc_ref = self.db.collection('submission_trackers').document()
-        doc_ref.set(tracker_data)
-        return doc_ref.id
+        if not self.db:
+            logger.error("Firebase client not initialized")
+            return None
+            
+        try:
+            doc_ref = self.db.collection('submission_trackers').document()
+            doc_ref.set(tracker_data)
+            return doc_ref.id
+        except Exception as e:
+            logger.error(f"Error saving tracker: {str(e)}")
+            return None
 
     def get_tracker(self, user_id, date):
         """Get tracker for a specific user and date"""
-        query = self.db.collection('submission_trackers').where('user_id', '==', user_id).where('date', '==', date)
-        docs = list(query.stream())
-        return docs[0].to_dict() if docs else None
+        if not self.db:
+            logger.error("Firebase client not initialized")
+            return None
+            
+        try:
+            query = self.db.collection('submission_trackers')\
+                .where('user_id', '==', user_id)\
+                .where('date', '==', date)
+            docs = list(query.stream())
+            return docs[0].to_dict() if docs else None
+        except Exception as e:
+            logger.error(f"Error getting tracker: {str(e)}")
+            return None
