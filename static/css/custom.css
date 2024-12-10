@@ -1,0 +1,23 @@
+/* Additional custom styles */
+.progress {
+    height: 20px;
+    background-color: var(--bs-dark);
+}
+
+.progress-bar {
+    background-color: var(--bs-info);
+}
+
+.table-responsive {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.card {
+    border: 1px solid var(--bs-border-color);
+    margin-bottom: 1rem;
+}
+
+.badge {
+    font-size: 0.875rem;
+}

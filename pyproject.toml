@@ -1,0 +1,17 @@
+[project]
+name = "repl-nix-eodslackbot"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.11"
+dependencies = [
+    "flask>=3.1.0",
+    "flask-apscheduler>=1.13.1",
+    "flask-sqlalchemy>=3.1.1",
+    "openai>=1.57.2",
+    "sqlalchemy>=2.0.36",
+    "psycopg2-binary",
+    "email-validator",
+    "slack-sdk",
+    "google-auth",
+    "google-api-python-client",
+]
