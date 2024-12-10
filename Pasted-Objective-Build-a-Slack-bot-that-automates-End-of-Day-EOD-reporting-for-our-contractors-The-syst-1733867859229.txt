@@ -1,0 +1,67 @@
+Objective:
+Build a Slack bot that automates End-of-Day (EOD) reporting for our contractors. The system should:
+
+    Prompt users in Slack at a designated time (e.g., 5 PM local time) to submit their EOD summary.
+    Allow users to input their EOD summaries, broken down by short-term and long-term project work.
+    Collect a progress percentage for each project (e.g., "Short-term Project: 60% complete").
+    Include additional useful prompts, such as:
+        Key accomplishments for the day.
+        Any blockers or challenges.
+        Goals for the next day.
+        Any noteworthy client interactions or feedback.
+    Once the user submits their summary, the bot should:
+        Immediately post their summary into a dedicated Slack channel (or thread) for visibility.
+        Store the submitted data into a specified Google Sheet. Each row in the sheet should include the contractor’s name, date, short-term project details, long-term project details, progress percentages, accomplishments, blockers, next-day goals, client interactions, and any other fields captured.
+    Use OpenAI’s API (e.g., GPT-4) to generate a weekly summarized report of each contractor’s work, progress, and notable issues. The summarized report should also be posted in Slack and appended to the Google Sheet at the end of the week.
+    Include a reminder functionality that sends automated Slack reminders at the designated EOD time to any user who has not yet submitted their EOD report for the day. This reminder should also be tracked, and possibly escalated if multiple days are missed.
+    Create a secondary Google Sheet that acts as a dashboard or tracker, showing daily submission status for each contractor. This sheet should:
+        List each contractor on the rows.
+        Have columns for each date.
+        Mark who has submitted (e.g., “Yes”) and who has not (e.g., “No”) for that day.
+        Allow for quick scanning to identify repeated non-submissions.
+    Ensure the system is robust, handles errors gracefully, and can scale as more contractors are added.
+
+Technical Details & Considerations:
+
+    Slack Integration:
+        Use Slack’s Events API or a scheduled job (like a cron) to send a DM or mention in a Slack channel each day at a set time prompting for the EOD report.
+        Collect responses either via Slack’s modal dialog or through direct message input fields.
+
+    Google Sheets Integration:
+        Use the Google Sheets API (via a service account) to append rows to the main EOD submissions spreadsheet after each submission.
+        Maintain a separate tracker sheet that automatically updates daily, marking submissions as they come in.
+
+    OpenAI Integration:
+        At the end of each week (e.g., Friday evening), pull all submissions for that week from the Google Sheet.
+        Send the collected data for each contractor to the OpenAI API to generate a summary.
+        Post the summarized results in Slack and add them to the end of the main EOD spreadsheet or to a separate “Weekly Summary” tab.
+
+    Reminders & Notifications:
+        Implement a reminder system that checks at a certain cutoff time (e.g., 5:30 PM) who has not submitted.
+        Send automated reminder Slack messages to those individuals.
+        If they fail to submit for multiple days, consider adding a notification that highlights these individuals to a designated Slack channel or a designated stakeholder.
+
+    Project Structure and Code Organization:
+        Use environment variables or secret storage to keep Slack bot tokens, Google service account keys, and OpenAI API keys secure.
+        Write clean, well-documented code and provide clear instructions for setting environment variables.
+
+    Testing and Deployment:
+        Test the Slack bot with a few dummy users.
+        Verify that submissions appear correctly in Google Sheets.
+        Test weekly summaries and ensure the OpenAI integration works as intended.
+        Validate that reminders are sent out if reports are missing.
+        Test the daily submission tracker sheet to ensure it updates properly.
+
+Deliverables:
+
+    Fully functional Slack bot code on Replit.
+    Integration with Google Sheets, including:
+        A main EOD submissions sheet with daily appended rows.
+        A tracker sheet marking submission status for each contractor.
+    Integration with OpenAI for weekly summaries.
+    Documentation:
+        How to set up/configure Slack bot and its permissions.
+        How to set up and manage Google Sheets API keys.
+        How to configure the OpenAI API.
+        How to modify the EOD questions, timings, and weekly summary prompts if needed.
+    Automated reminders and a process for highlighting repeated non-submissions.
