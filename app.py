@@ -360,51 +360,51 @@ def slack_interactivity():
                 # Close the modal immediately
                 response = {"response_action": "clear"}
                 
-                # Create a closure to capture the variables
-                def create_background_task(user_id, report_data, is_edit, report_id):
-                    def background_tasks():
-                        try:
-                            # Save to Firebase
-                            saved_report_id = None
-                            if is_edit and report_id:
-                                firebase_client.update_eod_report(report_id, report_data)
-                                saved_report_id = report_id
-                            else:
-                                saved_report_id = firebase_client.save_eod_report(user_id, report_data)
+                # Handle background tasks directly without closure
+                def process_submission():
+                    try:
+                        # Save to Firebase
+                        nonlocal report_id  # Access the outer scope variable
+                        saved_report_id = None
+                        
+                        if is_edit and report_id:
+                            firebase_client.update_eod_report(report_id, report_data)
+                            saved_report_id = report_id
+                        else:
+                            saved_report_id = firebase_client.save_eod_report(user_id, report_data)
+                            report_id = saved_report_id  # Update the outer scope variable
 
-                            # Update Google Sheets
-                            if sheets_client and sheets_client.service:
-                                try:
-                                    sheets_client.update_submissions(report_data)
-                                    sheets_client.update_tracker()
-                                except Exception as e:
-                                    logger.error(f"Error updating sheets: {str(e)}")
-
-                            # Post to channel
-                            slack_bot.post_report_to_channel(report_data)
-                            
-                            # Send confirmation message to user
-                            action_type = "updated" if is_edit else "submitted"
-                            slack_bot.send_message(user_id, f"Your EOD report has been {action_type} successfully!")
-                            
-                            # Generate weekly summary if in debug mode
+                        # Update Google Sheets
+                        if sheets_client and sheets_client.service:
                             try:
-                                if Config.DEBUG:
-                                    from scheduler import generate_weekly_summary
-                                    generate_weekly_summary(app)
-                                    logger.info(f"Generated weekly summary after {action_type} (debug mode)")
+                                sheets_client.update_submissions(report_data)
+                                sheets_client.update_tracker()
                             except Exception as e:
-                                logger.error(f"Error generating debug weekly summary: {str(e)}")
-                                
-                        except Exception as e:
-                            logger.error(f"Error in background tasks: {str(e)}")
-                            slack_bot.send_message(user_id, "There was an error processing your submission. Please try again or contact support.")
+                                logger.error(f"Error updating sheets: {str(e)}")
 
-                    return background_tasks
+                        # Post to channel
+                        slack_bot.post_report_to_channel(report_data)
+                        
+                        # Send confirmation message to user
+                        action_type = "updated" if is_edit else "submitted"
+                        slack_bot.send_message(user_id, f"Your EOD report has been {action_type} successfully!")
+                        
+                        # Generate weekly summary if in debug mode
+                        try:
+                            if Config.DEBUG:
+                                from scheduler import generate_weekly_summary
+                                generate_weekly_summary(app)
+                                logger.info(f"Generated weekly summary after {action_type} (debug mode)")
+                        except Exception as e:
+                            logger.error(f"Error generating debug weekly summary: {str(e)}")
+                            
+                    except Exception as e:
+                        logger.error(f"Error in background tasks: {str(e)}")
+                        slack_bot.send_message(user_id, "There was an error processing your submission. Please try again or contact support.")
 
                 # Start background tasks in a new thread
                 from threading import Thread
-                Thread(target=create_background_task(user_id, report_data, is_edit, report_id)).start()
+                Thread(target=process_submission).start()
                 
                 return jsonify(response)
 
@@ -483,6 +483,7 @@ def dashboard():
 if __name__ == '__main__':
     with app.app_context():
         try:
+            # Initialize scheduler
             logger.info("Setting up scheduler...")
             from scheduler import setup_scheduler
             setup_scheduler(app)
@@ -491,8 +492,23 @@ if __name__ == '__main__':
             # Get port from environment variable or default to 5000
             port = int(os.environ.get('PORT', 5000))
             
+            # Verify critical configurations
+            if not Config.SLACK_SIGNING_SECRET:
+                logger.error("Missing SLACK_SIGNING_SECRET configuration")
+                raise ValueError("SLACK_SIGNING_SECRET must be configured")
+                
+            if not Config.SLACK_BOT_TOKEN:
+                logger.error("Missing SLACK_BOT_TOKEN configuration")
+                raise ValueError("SLACK_BOT_TOKEN must be configured")
+            
+            # Start the server
             logger.info(f"Starting Flask server on port {port}...")
-            app.run(host='0.0.0.0', port=port, debug=False)
+            app.run(
+                host='0.0.0.0',
+                port=port,
+                debug=False,
+                use_reloader=False  # Disable reloader in production
+            )
         except Exception as e:
             logger.error(f"Failed to start application: {str(e)}")
             raise
