@@ -489,8 +489,8 @@ if __name__ == '__main__':
             setup_scheduler(app)
             logger.info("Scheduler setup complete")
             
-            # Get port from environment variable or default to 5000
-            port = int(os.environ.get('PORT', 5000))
+            # Get port from environment variable or default to 3000
+            port = int(os.environ.get('PORT', 3000))
             
             # Verify critical configurations
             if not Config.SLACK_SIGNING_SECRET:
@@ -503,12 +503,21 @@ if __name__ == '__main__':
             
             # Start the server
             logger.info(f"Starting Flask server on port {port}...")
-            app.run(
-                host='0.0.0.0',
-                port=port,
-                debug=False,
-                use_reloader=False  # Disable reloader in production
-            )
+            # Try alternative port if 3000 is busy
+            ports = [3000, 3001, 3002, 3003]
+            for port_num in ports:
+                try:
+                    app.run(
+                        host='0.0.0.0',  # Allow external access
+                        port=port_num,
+                        debug=False,
+                        use_reloader=False
+                    )
+                    break
+                except OSError:
+                    if port_num == ports[-1]:
+                        raise
+                    continue
         except Exception as e:
             logger.error(f"Failed to start application: {str(e)}")
             raise
