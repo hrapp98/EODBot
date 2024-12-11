@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify, render_template
+from slack_sdk.errors import SlackApiError
 from datetime import datetime
 import hmac
 import hashlib
@@ -6,10 +7,10 @@ import logging
 import json
 import os
 from config import Config
-from models import EODReport, SubmissionTracker, EODTracker #Added EODTracker import
+from models import EODReport, SubmissionTracker, EODTracker
 from slack_bot import SlackBot
 from firebase_client import FirebaseClient
-from google.cloud import firestore #Using google.cloud firestore
+from google.cloud import firestore
 
 # Set up logging with more detailed formatting
 logging.basicConfig(
@@ -48,20 +49,7 @@ app = create_app()
 
 # Initialize clients
 slack_bot = SlackBot()
-firebase_client = None
-
-# Initialize Firebase client if credentials are available
-if Config.firebase_config_valid():
-    try:
-        logger.info("Starting Firebase client initialization...")
-        firebase_client = FirebaseClient()
-        if firebase_client.db is None:
-            logger.warning("Firebase client not properly initialized - Firestore client is None")
-        else:
-            logger.info("Firebase client initialized successfully with Firestore access")
-    except Exception as e:
-        logger.error(f"Failed to initialize Firebase client: {str(e)}")
-        firebase_client = None
+firebase_client = FirebaseClient()
 
 @app.route('/', methods=['GET'])
 def index():
@@ -270,49 +258,19 @@ def slack_commands():
             'text': 'Sorry, something went wrong processing your command.'
         }), 500
 
-@app.route('/slack/interactivity', methods=['POST'])
+@app.route('/slack/interactive-endpoint', methods=['POST'])
 def slack_interactivity():
     """Handle Slack interactive components"""
     try:
-        # Verify request signature
-        timestamp = request.headers.get('X-Slack-Request-Timestamp', '')
-        signature = request.headers.get('X-Slack-Signature', '')
-        
-        if not timestamp or not signature:
-            logger.warning("Missing Slack verification headers")
-            return jsonify({'error': 'missing_headers'}), 400
-            
-        if abs(datetime.now().timestamp() - float(timestamp)) > 60 * 5:
-            logger.warning("Request timestamp too old")
-            return jsonify({'error': 'invalid_timestamp'}), 403
-            
-        sig_basestring = f"v0:{timestamp}:{request.get_data(as_text=True)}"
-        my_signature = 'v0=' + hmac.new(
-            Config.SLACK_SIGNING_SECRET.encode(),
-            sig_basestring.encode(),
-            hashlib.sha256
-        ).hexdigest()
-        
-        if not hmac.compare_digest(my_signature, signature):
-            logger.warning("Invalid request signature")
-            return jsonify({'error': 'invalid_signature'}), 403
-
-        # Verify request body
-        if not request.form or 'payload' not in request.form:
-            logger.warning("Missing payload in request form")
-            return jsonify({'error': 'invalid_request'}), 400
-        
-        # Parse the payload
-        try:
-            payload = json.loads(request.form['payload'])
-            logger.info(f"Received interactive payload type: {payload.get('type')}")
-            logger.debug(f"Full payload: {payload}")
-        except json.JSONDecodeError:
-            logger.error("Failed to parse payload JSON")
-            return jsonify({'error': 'invalid_payload'}), 400
+        # Verify request is from Slack
+        payload = request.json
+        if not payload:
+            logger.error("Empty payload received")
+            return jsonify({'error': 'empty_payload'}), 400
         
         # Handle different interaction types
         interaction_type = payload.get('type')
+        logger.info(f"Processing {interaction_type} with payload: {payload}")
         
         if interaction_type == 'view_submission':
             # Handle modal submission
@@ -337,35 +295,41 @@ def slack_interactivity():
                 }
                 
                 # Save to Firebase
-                if firebase_client:
-                    try:
-                        firebase_client.save_eod_report(user_id, report_data)
-                        # Post to channel
-                        slack_bot.post_report_to_channel(report_data)
-                        # Send confirmation message
-                        slack_bot.send_message(user_id, "Thank you! Your EOD report has been submitted.")
-                    except Exception as e:
-                        logger.error(f"Error saving EOD report: {str(e)}")
-                        return jsonify({
-                            'response_action': 'errors',
-                            'errors': {
-                                'short_term_block': 'Failed to save report. Please try again.'
-                            }
-                        })
-                
-                # Send confirmation message to user
+                if not firebase_client:
+                    logger.error("Firebase client not initialized")
+                    return jsonify({
+                        'response_action': 'errors',
+                        'errors': {
+                            'short_term_block': 'Service unavailable. Please try again later.'
+                        }
+                    })
+
                 try:
+                    # Save the report
+                    doc_id = firebase_client.save_eod_report(user_id, report_data)
+                    if not doc_id:
+                        raise Exception("Failed to save report")
+
+                    # Post to channel
+                    slack_bot.post_report_to_channel(report_data)
+                    
+                    # Close the modal first
+                    response = {'response_action': 'clear'}
+                    
+                    # Then send confirmation in a separate message
                     slack_bot.send_message(
                         user_id,
                         ":white_check_mark: Your EOD report has been submitted successfully! Thank you for your update."
                     )
-                    return jsonify({'response_action': 'clear'})
+                    
+                    return jsonify(response)
+
                 except Exception as e:
-                    logger.error(f"Error sending confirmation message: {str(e)}")
+                    logger.error(f"Error processing EOD submission: {str(e)}")
                     return jsonify({
                         'response_action': 'errors',
                         'errors': {
-                            'short_term_block': 'Failed to send confirmation. Please check if the report was submitted.'
+                            'short_term_block': 'Failed to submit report. Please try again.'
                         }
                     })
                 
