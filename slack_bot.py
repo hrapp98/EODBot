@@ -42,6 +42,7 @@ class SlackBot:
                             "type": "plain_text_input",
                             "action_id": "short_term_input",
                             "multiline": True,
+                            "max_length": 500,
                             "placeholder": {
                                 "type": "plain_text",
                                 "text": "What did you work on today?"
@@ -59,12 +60,12 @@ class SlackBot:
                             "type": "plain_text_input",
                             "action_id": "long_term_input",
                             "multiline": True,
+                            "max_length": 500,
                             "placeholder": {
                                 "type": "plain_text",
                                 "text": "Any progress on long-term initiatives?"
                             }
-                        },
-                        "optional": True
+                        }
                     },
                     
                     {
@@ -78,12 +79,12 @@ class SlackBot:
                             "type": "plain_text_input",
                             "action_id": "blockers_input",
                             "multiline": True,
+                            "max_length": 500,
                             "placeholder": {
                                 "type": "plain_text",
                                 "text": "Any blockers or challenges that you experienced?"
                             }
-                        },
-                        "optional": True
+                        }
                     },
                     {
                         "type": "input",
@@ -96,6 +97,7 @@ class SlackBot:
                             "type": "plain_text_input",
                             "action_id": "goals_input",
                             "multiline": True,
+                            "max_length": 500,
                             "placeholder": {
                                 "type": "plain_text",
                                 "text": "What are your goals for tomorrow?"
@@ -113,6 +115,7 @@ class SlackBot:
                             "type": "plain_text_input",
                             "action_id": "tools_input",
                             "multiline": True,
+                            "max_length": 500,
                             "placeholder": {
                                 "type": "plain_text",
                                 "text": "What software tools did you use today?"
@@ -130,6 +133,7 @@ class SlackBot:
                             "type": "plain_text_input",
                             "action_id": "help_input",
                             "multiline": True,
+                            "max_length": 500,
                             "placeholder": {
                                 "type": "plain_text",
                                 "text": "Is there anything we can help you with?"
@@ -226,13 +230,10 @@ class SlackBot:
         return f"""
 *EOD Report from <@{report_data['user_id']}>*
 *Short-term Projects:*
-{self._format_dict_items(report_data['short_term_projects'])}
+{report_data['short_term_projects']}
 
 *Long-term Projects:*
-{self._format_dict_items(report_data['long_term_projects'])}
-
-*Key Accomplishments:*
-{report_data['accomplishments']}
+{report_data['long_term_projects']}
 
 *Blockers/Challenges:*
 {report_data['blockers']}
@@ -240,8 +241,11 @@ class SlackBot:
 *Tomorrow's Goals:*
 {report_data['next_day_goals']}
 
-*Client Interactions:*
-{report_data['client_interactions']}
+*Software Tools Used Today:*
+{report_data['tools_used']}
+
+*Need Help?*
+{report_data['help_needed']}
         """.strip()
     
     def _format_dict_items(self, items):
