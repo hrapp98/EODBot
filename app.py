@@ -336,36 +336,43 @@ def slack_interactivity():
                     'created_at': datetime.utcnow().isoformat()
                 }
                 
-                # Save to Firebase
-                if firebase_client:
-                    try:
-                        firebase_client.save_eod_report(user_id, report_data)
-                        # Post to channel
-                        slack_bot.post_report_to_channel(report_data)
-                        # Send confirmation message
-                        slack_bot.send_message(user_id, "Thank you! Your EOD report has been submitted.")
-                    except Exception as e:
-                        logger.error(f"Error saving EOD report: {str(e)}")
-                        return jsonify({
-                            'response_action': 'errors',
-                            'errors': {
-                                'short_term_block': 'Failed to save report. Please try again.'
-                            }
-                        })
-                
-                # Send confirmation message to user
+                # Save to Firebase and send notifications
                 try:
+                    if not firebase_client:
+                        raise RuntimeError("Firebase client not initialized")
+                    
+                    # Save the report
+                    logger.info(f"Saving EOD report for user {user_id}")
+                    firebase_client.save_eod_report(user_id, report_data)
+                    
+                    # First close the modal with a success response
+                    logger.info("Sending success response to close modal")
+                    response = jsonify({
+                        'response_action': 'clear'
+                    })
+                    
+                    # Then post to channel and send confirmation asynchronously
+                    logger.info("Posting report to channel")
+                    slack_bot.post_report_to_channel(report_data)
+                    
+                    logger.info("Sending confirmation message")
                     slack_bot.send_message(
                         user_id,
                         ":white_check_mark: Your EOD report has been submitted successfully! Thank you for your update."
                     )
-                    return jsonify({'response_action': 'clear'})
+                    
+                    return response
+                    
                 except Exception as e:
-                    logger.error(f"Error sending confirmation message: {str(e)}")
+                    logger.error(f"Error processing EOD submission: {str(e)}")
+                    error_message = "Failed to save report. Please try again."
+                    if isinstance(e, RuntimeError):
+                        error_message = str(e)
+                    
                     return jsonify({
                         'response_action': 'errors',
                         'errors': {
-                            'short_term_block': 'Failed to send confirmation. Please check if the report was submitted.'
+                            'short_term_block': error_message
                         }
                     })
                 
