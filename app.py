@@ -1,13 +1,14 @@
 from flask import Flask, request, jsonify, render_template
-import logging
-import os
 from datetime import datetime
 import hmac
 import hashlib
-from slack_bot import SlackBot
-from firebase_client import FirebaseClient
+import logging
 from config import Config
 from models import EODReport, SubmissionTracker
+from slack_bot import SlackBot
+from firebase_client import FirebaseClient
+import os
+from firebase_admin import firestore
 
 # Set up logging with more detailed formatting
 logging.basicConfig(
@@ -193,7 +194,6 @@ def handle_eod_submission(event):
         logger.error(f"Error processing submission: {str(e)}")
         slack_bot.send_error_message(event.get('user'))
 
-@app.route('/dashboard')
 @app.route('/slack/commands', methods=['POST'])
 def slack_commands():
     """Handle Slack slash commands"""
@@ -243,6 +243,8 @@ def slack_commands():
             'response_type': 'ephemeral',
             'text': 'Sorry, something went wrong processing your command.'
         }), 500
+
+@app.route('/dashboard')
 def dashboard():
     """Render submission status dashboard"""
     try:
