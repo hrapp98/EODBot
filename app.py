@@ -1,13 +1,22 @@
-from flask import Flask, request, jsonify, render_template
-import logging
-import os
-from datetime import datetime
 import hmac
 import hashlib
+import json
+import os
+from datetime import datetime, timedelta
+from flask import Flask, request, jsonify, render_template
 from slack_bot import SlackBot
 from firebase_client import FirebaseClient
 from config import Config
 from models import EODReport, SubmissionTracker
+import logging
+
+# Setup logging with more detailed formatting
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
 # Set up logging with more detailed formatting
 logging.basicConfig(
