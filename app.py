@@ -330,12 +330,19 @@ def slack_commands():
             try:
                 logger.info(f"Sending EOD prompt to user {user_id}")
                 slack_bot.send_eod_prompt(user_id)
-                response = {
+                # First send immediate response to Slack
+                immediate_response = {
                     'response_type': 'ephemeral',
-                    'text': 'Please check your DM for the EOD report prompt!'
+                    'text': 'Processing your request...'
                 }
-                logger.debug(f"Sending response to Slack: {response}")
-                return jsonify(response)
+                logger.debug(f"Sending immediate response to Slack: {immediate_response}")
+                response = jsonify(immediate_response)
+                response.headers['Content-Type'] = 'application/json'
+                
+                # Then send the DM asynchronously
+                slack_bot.send_eod_prompt(user_id)
+                
+                return response, 200
             except Exception as e:
                 logger.error(f"Error sending EOD prompt: {str(e)}")
                 error_response = {
