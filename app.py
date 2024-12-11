@@ -14,11 +14,9 @@ from zoneinfo import ZoneInfo
 from sheets_client import SheetsClient
 
 # Set up logging first
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S')
 
 # Adjust specific loggers
 logging.getLogger('httpx').setLevel(logging.WARNING)
@@ -38,7 +36,8 @@ if os.path.exists('.env'):
 # For Replit secrets
 if os.environ.get('REPL_ID'):
     try:
-        secrets_path = os.path.join(os.environ.get('REPL_HOME', ''), '.config', 'secrets.json')
+        secrets_path = os.path.join(os.environ.get('REPL_HOME', ''), '.config',
+                                    'secrets.json')
         if os.path.exists(secrets_path):
             with open(secrets_path) as f:
                 secrets = json.load(f)
@@ -53,30 +52,34 @@ if os.environ.get('REPL_ID'):
 # Verify OpenAI key is loaded
 logger.info(f"OpenAI API key loaded: {bool(os.environ.get('OPENAI_API_KEY'))}")
 
+
 def create_app():
     """Initialize and configure Flask application"""
     try:
         logger.info("Creating Flask application...")
         app = Flask(__name__)
         app.secret_key = Config.FLASK_SECRET_KEY
-        
+
         # Set up logging middleware
         @app.before_request
         def before_request_logging():
-            logger.debug(f"Incoming {request.method} request to {request.path}")
+            logger.debug(
+                f"Incoming {request.method} request to {request.path}")
             if request.is_json:
                 logger.debug(f"Request payload: {request.json}")
 
         @app.after_request
         def after_request_logging(response):
-            logger.debug(f"Request completed with status {response.status_code}")
+            logger.debug(
+                f"Request completed with status {response.status_code}")
             return response
-            
+
         logger.info("Application creation successful")
         return app
     except Exception as e:
         logger.error(f"Failed to create application: {str(e)}")
         raise
+
 
 app = create_app()
 
@@ -91,9 +94,13 @@ if Config.firebase_config_valid():
         logger.info("Starting Firebase client initialization...")
         firebase_client = FirebaseClient()
         if firebase_client.db is None:
-            logger.warning("Firebase client not properly initialized - Firestore client is None")
+            logger.warning(
+                "Firebase client not properly initialized - Firestore client is None"
+            )
         else:
-            logger.info("Firebase client initialized successfully with Firestore access")
+            logger.info(
+                "Firebase client initialized successfully with Firestore access"
+            )
     except Exception as e:
         logger.error(f"Failed to initialize Firebase client: {str(e)}")
         firebase_client = None
@@ -111,12 +118,14 @@ if Config.sheets_config_valid():
         logger.error(f"Failed to initialize Sheets client: {str(e)}")
         sheets_client = None
 
+
 @app.route('/', methods=['GET'])
 def index():
     """Show welcome page"""
     if request.headers.get('Accept') == 'application/json':
         return jsonify({'status': 'ok'})
     return render_template('index.html')
+
 
 @app.route('/slack/events', methods=['POST'])
 def slack_events():
@@ -125,22 +134,20 @@ def slack_events():
         # Verify request signature
         timestamp = request.headers.get('X-Slack-Request-Timestamp', '')
         signature = request.headers.get('X-Slack-Signature', '')
-        
+
         if not timestamp or not signature:
             logger.warning("Missing Slack verification headers")
             return jsonify({'error': 'missing_headers'}), 400
-            
+
         if abs(datetime.now().timestamp() - float(timestamp)) > 60 * 5:
             logger.warning("Request timestamp too old")
             return jsonify({'error': 'invalid_timestamp'}), 403
-            
+
         sig_basestring = f"v0:{timestamp}:{request.get_data(as_text=True)}"
-        my_signature = 'v0=' + hmac.new(
-            Config.SLACK_SIGNING_SECRET.encode(),
-            sig_basestring.encode(),
-            hashlib.sha256
-        ).hexdigest()
-        
+        my_signature = 'v0=' + hmac.new(Config.SLACK_SIGNING_SECRET.encode(),
+                                        sig_basestring.encode(),
+                                        hashlib.sha256).hexdigest()
+
         if not hmac.compare_digest(my_signature, signature):
             logger.warning("Invalid request signature")
             return jsonify({'error': 'invalid_signature'}), 403
@@ -149,28 +156,29 @@ def slack_events():
         if not request.is_json:
             logger.warning("Request is not JSON")
             return jsonify({'error': 'invalid_content_type'}), 415
-            
+
         data = request.json
-        
+
         # Handle URL verification
         if data.get('type') == 'url_verification':
             return jsonify({'challenge': data['challenge']})
-        
+
         # Handle events
         if data.get('type') == 'event_callback':
             event = data.get('event', {})
             event_type = event.get('type')
-            
+
             if event_type == 'message' and 'bot_id' not in event:
                 handle_message(event)
             elif event_type == 'app_mention':
                 handle_app_mention(event)
-                
+
         return jsonify({'status': 'ok'})
-        
+
     except Exception as e:
         logger.error(f"Error handling Slack event: {str(e)}")
         return jsonify({'error': 'internal_error'}), 500
+
 
 def handle_message(event):
     """Process incoming messages"""
@@ -179,13 +187,13 @@ def handle_message(event):
         user_id = event.get('user')
         channel_type = event.get('channel_type', '')
         channel_id = event.get('channel')  # Get the channel/DM ID
-        
+
         logger.debug(f"Processing message from user {user_id}: {text}")
-        
+
         # Skip if this is a bot message
         if event.get('bot_id') or event.get('subtype') == 'bot_message':
             return
-            
+
         # Handle direct messages
         if channel_type == 'im':
             if text == 'eod report':
@@ -196,7 +204,9 @@ def handle_message(event):
                     private_metadata = json.dumps({'channel_id': channel_id})
                     slack_bot.send_eod_prompt(trigger_id, private_metadata)
                 else:
-                    slack_bot.send_message(user_id, "Please use the /eod command to submit your report.")
+                    slack_bot.send_message(
+                        user_id,
+                        "Please use the /eod command to submit your report.")
             elif text.startswith('submit eod:'):
                 # Handle EOD submission
                 handle_eod_submission(event)
@@ -211,26 +221,35 @@ def handle_message(event):
                 try:
                     report = EODReport.create_from_text(user_id, text)
                     if firebase_client:
-                        firebase_client.save_eod_report(user_id, report.to_dict())
+                        firebase_client.save_eod_report(
+                            user_id, report.to_dict())
                         slack_bot.post_report_to_channel(report.to_dict())
-                        slack_bot.send_message(user_id, "Thank you! Your EOD report has been submitted.")
+                        slack_bot.send_message(
+                            user_id,
+                            "Thank you! Your EOD report has been submitted.")
                 except Exception as e:
                     logger.error(f"Error processing EOD report: {str(e)}")
-                    slack_bot.send_message(user_id, "I couldn't process that as an EOD report. Try using the format shown in the prompt, or type 'help' for instructions.")
-            
+                    slack_bot.send_message(
+                        user_id,
+                        "I couldn't process that as an EOD report. Try using the format shown in the prompt, or type 'help' for instructions."
+                    )
+
     except Exception as e:
         logger.error(f"Error handling message: {str(e)}")
         slack_bot.send_error_message(user_id)
 
+
 def handle_app_mention(event):
     """Handle when the bot is mentioned"""
     try:
-        text = event.get('text', '').lower().replace(f'<@{event.get("bot_id", "")}>', '').strip()
+        text = event.get('text',
+                         '').lower().replace(f'<@{event.get("bot_id", "")}>',
+                                             '').strip()
         user_id = event.get('user')
         channel_id = event.get('channel')  # Get the channel ID
-        
+
         logger.debug(f"Processing mention from user {user_id}: {text}")
-        
+
         if 'eod report' in text:
             # Pass the channel ID in private_metadata
             trigger_id = event.get('trigger_id')
@@ -243,35 +262,39 @@ def handle_app_mention(event):
             slack_bot.send_status_update(user_id)
         elif 'help' in text or text == '':
             slack_bot.send_help_message(user_id)
-            
+
     except Exception as e:
         logger.error(f"Error handling mention: {str(e)}")
         slack_bot.send_error_message(user_id)
+
 
 def handle_eod_submission(event):
     """Process EOD report submission"""
     try:
         user_id = event.get('user')
         text = event.get('text').replace('submit eod:', '', 1).strip()
-        
+
         # Create and save EOD report
         report = EODReport.create_from_text(user_id, text)
-        
+
         # Save report to Firebase
         if firebase_client:
             try:
-                firebase_client.save_eod_report(report.user_id, report.to_dict())
+                firebase_client.save_eod_report(report.user_id,
+                                                report.to_dict())
             except Exception as e:
                 logger.error(f"Failed to save report to Firebase: {str(e)}")
                 raise
-        
+
         # Post to Slack channel
         slack_bot.post_report_to_channel(report.to_dict())
-        slack_bot.send_message(user_id, "Your EOD report has been submitted successfully!")
-            
+        slack_bot.send_message(
+            user_id, "Your EOD report has been submitted successfully!")
+
     except Exception as e:
         logger.error(f"Error processing submission: {str(e)}")
         slack_bot.send_error_message(event.get('user'))
+
 
 @app.route('/slack/commands', methods=['POST'])
 def slack_commands():
@@ -282,18 +305,21 @@ def slack_commands():
         user_id = request.form.get('user_id')
         channel_id = request.form.get('channel_id')
         trigger_id = request.form.get('trigger_id')
-        
+
         if command == '/eod':
             # Check for existing report
             if firebase_client:
                 try:
                     today = datetime.now(ZoneInfo("America/New_York")).date()
-                    existing_report = firebase_client.get_user_report_for_date(user_id, today)
-                    
+                    existing_report = firebase_client.get_user_report_for_date(
+                        user_id, today)
+
                     if existing_report:
                         # Send message with interactive buttons
-                        slack_bot.send_already_submitted_message(channel_id, user_id, today)
-                        return ('', 200)  # Return empty 200 response with no content
+                        slack_bot.send_already_submitted_message(
+                            channel_id, user_id, today)
+                        return ('', 200
+                                )  # Return empty 200 response with no content
                     else:
                         # No existing report, open the modal
                         slack_bot.send_eod_prompt(trigger_id)
@@ -304,22 +330,29 @@ def slack_commands():
                 except Exception as e:
                     logger.error(f"Error checking existing report: {str(e)}")
                     return jsonify({
-                        'response_type': 'ephemeral',
-                        'text': 'Sorry, there was an error checking your report status.'
+                        'response_type':
+                        'ephemeral',
+                        'text':
+                        'Sorry, there was an error checking your report status.'
                     }), 500
             else:
                 logger.error("Firebase client not initialized")
                 return jsonify({
-                    'response_type': 'ephemeral',
-                    'text': 'Sorry, the EOD report system is not properly configured.'
+                    'response_type':
+                    'ephemeral',
+                    'text':
+                    'Sorry, the EOD report system is not properly configured.'
                 }), 500
-            
+
     except Exception as e:
         logger.error(f"Error handling slash command: {str(e)}")
         return jsonify({
-            'response_type': 'ephemeral',
-            'text': 'Sorry, something went wrong processing your command.'
+            'response_type':
+            'ephemeral',
+            'text':
+            'Sorry, something went wrong processing your command.'
         }), 500
+
 
 @app.route('/slack/interactive-endpoint', methods=['POST'])
 def slack_interactivity():
@@ -328,84 +361,113 @@ def slack_interactivity():
         if request.form.get('payload'):
             payload = json.loads(request.form['payload'])
             logger.debug(f"Full payload: {payload}")
-            
+
             if payload['type'] == 'view_submission':
                 logger.info("Received view submission")
-                
+
                 # Extract values from the submission
                 values = payload['view']['state']['values']
                 report_data = {
-                    'short_term_projects': values['short_term_block']['short_term_input']['value'],
-                    'long_term_projects': values['long_term_block']['long_term_input']['value'],
-                    'blockers': values['blockers_block']['blockers_input']['value'],
-                    'next_day_goals': values['goals_block']['goals_input']['value'],
-                    'tools_used': values['tools_block']['tools_input']['value'],
-                    'help_needed': values['help_block']['help_input']['value'],
-                    'client_feedback': values['client_feedback_block']['client_feedback_input']['value']
+                    'short_term_projects':
+                    values['short_term_block']['short_term_input']['value'],
+                    'long_term_projects':
+                    values['long_term_block']['long_term_input']['value'],
+                    'blockers':
+                    values['blockers_block']['blockers_input']['value'],
+                    'next_day_goals':
+                    values['goals_block']['goals_input']['value'],
+                    'tools_used':
+                    values['tools_block']['tools_input']['value'],
+                    'help_needed':
+                    values['help_block']['help_input']['value'],
+                    'client_feedback':
+                    values['client_feedback_block']['client_feedback_input']
+                    ['value']
                 }
-                
+
                 user_id = payload['user']['id']
                 report_data['user_id'] = user_id  # Add user_id to report_data
-                
+
                 # Check if this is an edit
                 try:
-                    metadata = json.loads(payload['view'].get('private_metadata', '{}'))
+                    metadata = json.loads(payload['view'].get(
+                        'private_metadata', '{}'))
                     is_edit = metadata.get('is_edit', False)
                     report_id = metadata.get('report_id')
                 except json.JSONDecodeError:
-                    logger.warning("Invalid private_metadata JSON, treating as new submission")
+                    logger.warning(
+                        "Invalid private_metadata JSON, treating as new submission"
+                    )
                     is_edit = False
                     report_id = None
 
                 # Close the modal immediately
                 response = {"response_action": "clear"}
-                
+
                 # Create a closure to capture the variables
-                def create_background_task(user_id, report_data, is_edit, report_id):
+                def create_background_task(user_id, report_data, is_edit,
+                                           report_id):
+
                     def background_tasks():
                         try:
                             # Save to Firebase
                             saved_report_id = None
                             if is_edit and report_id:
-                                firebase_client.update_eod_report(report_id, report_data)
+                                firebase_client.update_eod_report(
+                                    report_id, report_data)
                                 saved_report_id = report_id
                             else:
-                                saved_report_id = firebase_client.save_eod_report(user_id, report_data)
+                                saved_report_id = firebase_client.save_eod_report(
+                                    user_id, report_data)
 
                             # Update Google Sheets
                             if sheets_client and sheets_client.service:
                                 try:
-                                    sheets_client.update_submissions(report_data)
+                                    sheets_client.update_submissions(
+                                        report_data)
                                     sheets_client.update_tracker()
                                 except Exception as e:
-                                    logger.error(f"Error updating sheets: {str(e)}")
+                                    logger.error(
+                                        f"Error updating sheets: {str(e)}")
 
                             # Post to channel
                             slack_bot.post_report_to_channel(report_data)
-                            
+
                             # Send confirmation message to user
                             action_type = "updated" if is_edit else "submitted"
-                            slack_bot.send_message(user_id, f"Your EOD report has been {action_type} successfully!")
-                            
+                            slack_bot.send_message(
+                                user_id,
+                                f"Your EOD report has been {action_type} successfully!"
+                            )
+
                             # Generate weekly summary if in debug mode
                             try:
                                 if Config.DEBUG:
                                     from scheduler import generate_weekly_summary
                                     generate_weekly_summary(app)
-                                    logger.info(f"Generated weekly summary after {action_type} (debug mode)")
+                                    logger.info(
+                                        f"Generated weekly summary after {action_type} (debug mode)"
+                                    )
                             except Exception as e:
-                                logger.error(f"Error generating debug weekly summary: {str(e)}")
-                                
+                                logger.error(
+                                    f"Error generating debug weekly summary: {str(e)}"
+                                )
+
                         except Exception as e:
-                            logger.error(f"Error in background tasks: {str(e)}")
-                            slack_bot.send_message(user_id, "There was an error processing your submission. Please try again or contact support.")
+                            logger.error(
+                                f"Error in background tasks: {str(e)}")
+                            slack_bot.send_message(
+                                user_id,
+                                "There was an error processing your submission. Please try again or contact support."
+                            )
 
                     return background_tasks
 
                 # Start background tasks in a new thread
                 from threading import Thread
-                Thread(target=create_background_task(user_id, report_data, is_edit, report_id)).start()
-                
+                Thread(target=create_background_task(
+                    user_id, report_data, is_edit, report_id)).start()
+
                 return jsonify(response)
 
             elif payload['type'] == 'block_actions':
@@ -414,36 +476,35 @@ def slack_interactivity():
                 if action_id in ['view_report', 'edit_report']:
                     user_id = payload['user']['id']
                     today = datetime.now(ZoneInfo("America/New_York")).date()
-                    report = firebase_client.get_user_report_for_date(user_id, today)
-                    
+                    report = firebase_client.get_user_report_for_date(
+                        user_id, today)
+
                     if not report:
                         # Handle case where report doesn't exist
                         return jsonify({
-                            "response_type": "ephemeral",
-                            "text": "Could not find today's report. It may have been deleted."
+                            "response_type":
+                            "ephemeral",
+                            "text":
+                            "Could not find today's report. It may have been deleted."
                         })
-                    
+
                     if action_id == 'edit_report':
-                        metadata = {
-                            'is_edit': True,
-                            'report_id': report['id']
-                        }
+                        metadata = {'is_edit': True, 'report_id': report['id']}
                         slack_bot.send_eod_prompt(
                             trigger_id=payload['trigger_id'],
                             private_metadata=json.dumps(metadata),
-                            existing_data=report
-                        )
+                            existing_data=report)
                     else:  # view_report
                         # Show report in a message
                         channel_id = payload['container']['channel_id']
-                        formatted_report = slack_bot._format_report_for_channel(report)
+                        formatted_report = slack_bot._format_report_for_channel(
+                            report)
                         slack_bot.client.chat_postEphemeral(
                             channel=channel_id,
                             user=user_id,
                             text=formatted_report,
-                            parse='mrkdwn'
-                        )
-                        
+                            parse='mrkdwn')
+
                     return jsonify({"message": "Processing action"})
 
     except Exception as e:
@@ -452,20 +513,21 @@ def slack_interactivity():
 
     return jsonify({"message": "Success"}), 200
 
+
 @app.route('/dashboard')
 def dashboard():
     """Render submission status dashboard"""
     try:
         if not firebase_client:
             return "Firebase client not initialized. Please check configuration.", 500
-            
+
         # Get recent reports from Firebase
         reports = []
         docs = firebase_client.db.collection('eod_reports')\
             .order_by('timestamp', direction=firestore.Query.DESCENDING)\
             .limit(10)\
             .stream()
-        
+
         for doc in docs:
             data = doc.to_dict()
             created_at = datetime.fromisoformat(data['timestamp'])
@@ -473,7 +535,7 @@ def dashboard():
                 'user_id': data['user_id'],
                 'created_at': created_at
             })
-            
+
         return render_template('dashboard.html', reports=reports)
     except Exception as e:
         logger.error(f"Error loading dashboard: {str(e)}")
@@ -486,10 +548,13 @@ def init_app():
     try:
         # First verify all required environment variables
         logger.info("Checking environment configuration...")
-        required_vars = ['SLACK_BOT_TOKEN', 'SLACK_SIGNING_SECRET', 'OPENAI_API_KEY']
-        missing_vars = [var for var in required_vars if not os.environ.get(var)]
+        required_vars = ['SLACK_SIGNING_SECRET', 'OPENAI_API_KEY']
+        missing_vars = [
+            var for var in required_vars if not os.environ.get(var)
+        ]
         if missing_vars:
-            logger.error(f"Missing required environment variables: {missing_vars}")
+            logger.error(
+                f"Missing required environment variables: {missing_vars}")
             return False
 
         with app.app_context():
@@ -497,14 +562,16 @@ def init_app():
             from scheduler import setup_scheduler
             setup_scheduler(app)
             logger.info("Scheduler setup completed successfully")
-            
+
         logger.info("Application initialization completed successfully")
         return True
     except Exception as e:
-        logger.error(f"Failed to initialize application: {str(e)}", exc_info=True)
+        logger.error(f"Failed to initialize application: {str(e)}",
+                     exc_info=True)
         import traceback
         logger.error(f"Full stack trace: {traceback.format_exc()}")
         return False
+
 
 # Configure for production
 app.config['ENV'] = 'production'
@@ -516,10 +583,7 @@ if __name__ == '__main__':
     if not init_app():
         logger.critical("Application failed to initialize. Exiting.")
         exit(1)
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
-else:
-    # Initialize when imported by gunicorn
-    if not init_app():
+    port = int(os.environ.get('PORT', 3000))
+    app.run(host='0.0.0.0', port=port, debug=True)
         logger.critical("Application failed to initialize. Exiting.")
         exit(1)
