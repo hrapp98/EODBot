@@ -3,155 +3,58 @@ from slack_sdk.errors import SlackApiError
 from config import Config
 from datetime import datetime
 import logging
+import json
 
 logger = logging.getLogger(__name__)
 
 class SlackBot:
     def __init__(self):
         self.client = WebClient(token=Config.SLACK_BOT_OAUTH_TOKEN)
+        self._ensure_in_channels()
     
-    def send_eod_prompt(self, trigger_id):
-        """Open EOD report modal for user"""
+    def _ensure_in_channels(self):
+        """Ensure bot is in required channels"""
         try:
-            logger.info(f"Opening EOD modal with trigger_id: {trigger_id}")
+            # Try to join the weekly summary channel
+            try:
+                response = self.client.conversations_join(
+                    channel=Config.SLACK_WEEKLY_SUMMARY_CHANNEL
+                )
+                if response['ok']:
+                    logger.info(f"Successfully joined channel {Config.SLACK_WEEKLY_SUMMARY_CHANNEL}")
+            except SlackApiError as e:
+                if e.response['error'] == 'is_archived':
+                    logger.error(f"Channel {Config.SLACK_WEEKLY_SUMMARY_CHANNEL} is archived")
+                elif e.response['error'] == 'channel_not_found':
+                    logger.error(f"Channel {Config.SLACK_WEEKLY_SUMMARY_CHANNEL} not found. Please create it and invite the bot.")
+                else:
+                    logger.error(f"Error joining channel: {e.response['error']}")
+        except Exception as e:
+            logger.error(f"Error ensuring channel membership: {str(e)}")
+
+    def send_eod_prompt(self, trigger_id, private_metadata=None, existing_data=None):
+        """Send EOD report modal"""
+        try:
+            logger.debug(f"Opening modal with trigger_id: {trigger_id}")
             
-            view = {
-                "type": "modal",
-                "callback_id": "eod_report_modal",
-                "title": {
-                    "type": "plain_text",
-                    "text": "EOD Report"
-                },
-                "submit": {
-                    "type": "plain_text",
-                    "text": "Submit"
-                },
-                "close": {
-                    "type": "plain_text",
-                    "text": "Cancel"
-                },
-                "blocks": [
-                    {
-                        "type": "input",
-                        "block_id": "short_term_block",
-                        "label": {
-                            "type": "plain_text",
-                            "text": "Short-term Projects"
-                        },
-                        "element": {
-                            "type": "plain_text_input",
-                            "action_id": "short_term_input",
-                            "multiline": True,
-                            "max_length": 500,
-                            "placeholder": {
-                                "type": "plain_text",
-                                "text": "What did you work on today?"
-                            }
-                        }
-                    },
-                    {
-                        "type": "input",
-                        "block_id": "long_term_block",
-                        "label": {
-                            "type": "plain_text",
-                            "text": "Long-term Projects"
-                        },
-                        "element": {
-                            "type": "plain_text_input",
-                            "action_id": "long_term_input",
-                            "multiline": True,
-                            "max_length": 500,
-                            "placeholder": {
-                                "type": "plain_text",
-                                "text": "Any progress on long-term initiatives?"
-                            }
-                        }
-                    },
-                    
-                    {
-                        "type": "input",
-                        "block_id": "blockers_block",
-                        "label": {
-                            "type": "plain_text",
-                            "text": "Blockers/Challenges"
-                        },
-                        "element": {
-                            "type": "plain_text_input",
-                            "action_id": "blockers_input",
-                            "multiline": True,
-                            "max_length": 500,
-                            "placeholder": {
-                                "type": "plain_text",
-                                "text": "Any blockers or challenges that you experienced?"
-                            }
-                        }
-                    },
-                    {
-                        "type": "input",
-                        "block_id": "goals_block",
-                        "label": {
-                            "type": "plain_text",
-                            "text": "Tomorrow's Goals"
-                        },
-                        "element": {
-                            "type": "plain_text_input",
-                            "action_id": "goals_input",
-                            "multiline": True,
-                            "max_length": 500,
-                            "placeholder": {
-                                "type": "plain_text",
-                                "text": "What are your goals for tomorrow?"
-                            }
-                        }
-                    },
-                    {
-                        "type": "input",
-                        "block_id": "tools_block",
-                        "label": {
-                            "type": "plain_text",
-                            "text": "Software Tools Used Today"
-                        },
-                        "element": {
-                            "type": "plain_text_input",
-                            "action_id": "tools_input",
-                            "multiline": True,
-                            "max_length": 500,
-                            "placeholder": {
-                                "type": "plain_text",
-                                "text": "What software tools did you use today?"
-                            }
-                        }
-                    },
-                    {
-                        "type": "input",
-                        "block_id": "help_block",
-                        "label": {
-                            "type": "plain_text",
-                            "text": "Need Help?"
-                        },
-                        "element": {
-                            "type": "plain_text_input",
-                            "action_id": "help_input",
-                            "multiline": True,
-                            "max_length": 500,
-                            "placeholder": {
-                                "type": "plain_text",
-                                "text": "Is there anything we can help you with?"
-                            }
-                        }
-                    }
-                ]
-            }
+            # Build modal view
+            view = self._build_eod_modal(private_metadata, existing_data)
+
+            logger.debug(f"Sending modal view: {json.dumps(view, indent=2)}")
             
             # Open the modal
-            self.client.views_open(
+            response = self.client.views_open(
                 trigger_id=trigger_id,
                 view=view
             )
-            logger.info("EOD modal opened successfully")
             
-        except SlackApiError as e:
-            logger.error(f"Error opening modal: {e.response['error']}")
+            if response["ok"]:
+                logger.info("Successfully opened modal")
+            else:
+                logger.error(f"Error opening modal: {response.get('error')}")
+                
+        except Exception as e:
+            logger.error(f"Error sending EOD prompt: {str(e)}")
     
     def send_reminder(self, user_id):
         """Send reminder for missing EOD report"""
@@ -166,24 +69,36 @@ class SlackBot:
     def post_report_to_channel(self, report_data):
         """Post EOD report to designated channel"""
         try:
-            text = self._format_report_for_channel(report_data)
+            channel = Config.SLACK_CHANNEL
+            formatted_report = self._format_report_for_channel(report_data)
+            
             self.client.chat_postMessage(
-                channel=Config.SLACK_EOD_CHANNEL,
-                text=text,
-                unfurl_links=False
+                channel=channel,
+                text=formatted_report,
+                parse='mrkdwn'
             )
+            logger.info(f"Posted report to channel {channel}")
         except SlackApiError as e:
-            logger.error(f"Error posting to channel: {e.response['error']}")
+            logger.error(f"Error posting report to channel: {e.response['error']}")
     
     def send_error_message(self, user_id):
         """Send error message to user"""
         self.send_message(user_id, "Sorry, there was an error processing your EOD report. Please try again.")
 
-    def send_message(self, user_id, text, thread_ts=None):
-        """Send a simple message to a user"""
+    def send_message(self, channel_id, text, thread_ts=None):
+        """Send a simple message to a channel or user"""
         try:
+            # If it's a channel (starts with 'C'), try to join it first
+            if channel_id.startswith('C'):
+                try:
+                    self.client.conversations_join(channel=channel_id)
+                    logger.info(f"Joined channel {channel_id}")
+                except SlackApiError as e:
+                    if e.response['error'] != 'already_in_channel':
+                        logger.error(f"Error joining channel: {e.response['error']}")
+            
             message_params = {
-                'channel': user_id,
+                'channel': channel_id,
                 'text': text
             }
             if thread_ts:
@@ -227,6 +142,12 @@ class SlackBot:
     
     def _format_report_for_channel(self, report_data):
         """Format EOD report for Slack channel display"""
+        client_feedback = report_data.get('client_feedback', '').strip()
+        client_feedback_section = f"""
+*Client Feedback:*
+{client_feedback}
+""" if client_feedback else ""
+
         return f"""
 *EOD Report from <@{report_data['user_id']}>*
 *Short-term Projects:*
@@ -243,7 +164,7 @@ class SlackBot:
 
 *Software Tools Used Today:*
 {report_data['tools_used']}
-
+{client_feedback_section}
 *Need Help?*
 {report_data['help_needed']}
         """.strip()
@@ -251,4 +172,225 @@ class SlackBot:
     def _format_dict_items(self, items):
         if not items:
             return "None reported"
-        return "\n".join([f"• {item}" for item in items.values()])
+        return "\n".join([f" {item}" for item in items.values()])
+    
+    def send_already_submitted_message(self, channel_id, user_id, date):
+        """Send message indicating report was already submitted with interactive buttons"""
+        try:
+            logger.debug(f"Sending already submitted message to channel {channel_id} for user {user_id}")
+            blocks = [
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f"Your EOD Report has already been submitted for {date.strftime('%B %d, %Y')}"
+                    }
+                },
+                {
+                    "type": "actions",
+                    "block_id": "already_submitted_actions",
+                    "elements": [
+                        {
+                            "type": "button",
+                            "text": {
+                                "type": "plain_text",
+                                "text": "View",
+                                "emoji": True
+                            },
+                            "style": "primary",
+                            "value": "view_report",
+                            "action_id": "view_report"
+                        },
+                        {
+                            "type": "button",
+                            "text": {
+                                "type": "plain_text",
+                                "text": "Edit",
+                                "emoji": True
+                            },
+                            "style": "primary",
+                            "value": "edit_report",
+                            "action_id": "edit_report"
+                        }
+                    ]
+                }
+            ]
+            
+            # Send as an ephemeral message in the channel where command was triggered
+            response = self.client.chat_postEphemeral(
+                channel=channel_id,
+                user=user_id,
+                blocks=blocks,
+                text=f"Your EOD Report has already been submitted for {date.strftime('%B %d, %Y')}"  # Fallback text
+            )
+            logger.debug(f"Slack API Response: {response}")
+            logger.info(f"Sent already submitted message in channel {channel_id} to user {user_id}")
+        except SlackApiError as e:
+            logger.error(f"Error sending already submitted message: {e.response['error']}")
+    
+    def show_report(self, user_id, report):
+        """Show an existing report to the user"""
+        try:
+            formatted_report = self._format_report_for_channel(report)
+            self.client.chat_postMessage(
+                channel=user_id,  # DM the user
+                text=formatted_report,
+                parse='mrkdwn'
+            )
+        except SlackApiError as e:
+            logger.error(f"Error showing report: {e.response['error']}")
+    
+    def _build_eod_modal(self, private_metadata=None, existing_data=None):
+        """Build EOD report modal view"""
+        blocks = [
+            {
+                "type": "input",
+                "block_id": "short_term_block",
+                "label": {"type": "plain_text", "text": "Short-term Projects"},
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": "short_term_input",
+                    "multiline": True,
+                    "initial_value": existing_data.get('short_term_projects', '') if existing_data else '',
+                    "placeholder": {"type": "plain_text", "text": "What did you work on today?"}
+                }
+            },
+            {
+                "type": "input",
+                "block_id": "long_term_block",
+                "label": {"type": "plain_text", "text": "Long-term Projects"},
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": "long_term_input",
+                    "multiline": True,
+                    "initial_value": existing_data.get('long_term_projects', '') if existing_data else '',
+                    "placeholder": {"type": "plain_text", "text": "Any progress on longer-term initiatives?"}
+                }
+            },
+            {
+                "type": "input",
+                "block_id": "blockers_block",
+                "label": {"type": "plain_text", "text": "Blockers"},
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": "blockers_input",
+                    "multiline": True,
+                    "initial_value": existing_data.get('blockers', '') if existing_data else '',
+                    "placeholder": {"type": "plain_text", "text": "Any challenges or blockers?"}
+                }
+            },
+            {
+                "type": "input",
+                "block_id": "goals_block",
+                "label": {"type": "plain_text", "text": "Next Day Goals"},
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": "goals_input",
+                    "multiline": True,
+                    "initial_value": existing_data.get('next_day_goals', '') if existing_data else '',
+                    "placeholder": {"type": "plain_text", "text": "What are your goals for tomorrow?"}
+                }
+            },
+            {
+                "type": "input",
+                "block_id": "tools_block",
+                "label": {"type": "plain_text", "text": "Tools Used"},
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": "tools_input",
+                    "initial_value": existing_data.get('tools_used', '') if existing_data else '',
+                    "placeholder": {"type": "plain_text", "text": "What tools/technologies did you use today?"}
+                }
+            },
+            {
+                "type": "input",
+                "block_id": "help_block",
+                "label": {"type": "plain_text", "text": "Help Needed"},
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": "help_input",
+                    "multiline": True,
+                    "initial_value": existing_data.get('help_needed', '') if existing_data else '',
+                    "placeholder": {"type": "plain_text", "text": "Do you need any help or support?"}
+                }
+            },
+            {
+                "type": "input",
+                "block_id": "client_feedback_block",
+                "label": {"type": "plain_text", "text": "Client Feedback"},
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": "client_feedback_input",
+                    "multiline": True,
+                    "initial_value": existing_data.get('client_feedback', '') if existing_data else '',
+                    "placeholder": {"type": "plain_text", "text": "Any feedback received from clients?"}
+                },
+                "optional": True
+            }
+        ]
+
+        return {
+            "type": "modal",
+            "callback_id": "eod_submission",
+            "title": {"type": "plain_text", "text": "EOD Report"},
+            "submit": {"type": "plain_text", "text": "Submit"},
+            "close": {"type": "plain_text", "text": "Cancel"},
+            "blocks": blocks,
+            "private_metadata": private_metadata or ""
+        }
+
+    def get_channel_members(self, channel_id):
+        """Get list of members in a channel"""
+        try:
+            # Get channel info including members
+            response = self.client.conversations_members(channel=channel_id)
+            members = response['members']
+            
+            # Filter out bots and inactive users
+            active_members = []
+            for member in members:
+                user_info = self.client.users_info(user=member)['user']
+                if not user_info.get('is_bot', False) and not user_info.get('deleted', False):
+                    active_members.append(member)
+                
+            logger.info(f"Found {len(active_members)} active members in channel {channel_id}")
+            return active_members
+            
+        except SlackApiError as e:
+            logger.error(f"Error getting channel members: {e.response['error']}")
+            return []
+
+    def post_weekly_summary(self, user_id, summary):
+        """Post weekly summary to the weekly summaries channel"""
+        try:
+            # Get channel ID first
+            try:
+                response = self.client.conversations_list(types="private_channel")
+                channel_id = None
+                for channel in response['channels']:
+                    if channel['name'] == Config.SLACK_WEEKLY_SUMMARY_CHANNEL.lstrip('#'):
+                        channel_id = channel['id']
+                        break
+                
+                if not channel_id:
+                    raise ValueError(f"Channel {Config.SLACK_WEEKLY_SUMMARY_CHANNEL} not found")
+                
+                # Post to weekly summaries channel
+                self.client.chat_postMessage(
+                    channel=channel_id,
+                    text=f"*Weekly Summary for <@{user_id}>*\n\n{summary}",
+                    parse='mrkdwn'
+                )
+                
+                # Also send to the user
+                self.send_message(
+                    user_id,
+                    f"Your weekly summary has been generated and posted to <#{channel_id}>:\n\n{summary}"
+                )
+                
+                logger.info(f"Posted weekly summary for user {user_id}")
+            except SlackApiError as e:
+                logger.error(f"Error posting weekly summary: {e.response['error']}")
+                
+        except Exception as e:
+            logger.error(f"Error in post_weekly_summary: {str(e)}")

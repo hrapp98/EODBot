@@ -6,18 +6,52 @@ import logging
 import json
 import os
 from config import Config
-from models import EODReport, SubmissionTracker, EODTracker #Added EODTracker import
+from models import EODReport, SubmissionTracker, EODTracker
 from slack_bot import SlackBot
 from firebase_client import FirebaseClient
-from google.cloud import firestore #Using google.cloud firestore
+from google.cloud import firestore
+from zoneinfo import ZoneInfo
+from sheets_client import SheetsClient
 
-# Set up logging with more detailed formatting
+# Set up logging first
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
+
+# Adjust specific loggers
+logging.getLogger('httpx').setLevel(logging.WARNING)
+logging.getLogger('httpcore').setLevel(logging.WARNING)
+logging.getLogger('openai').setLevel(logging.WARNING)
+logging.getLogger('slack_sdk.web.base_client').setLevel(logging.WARNING)
+logging.getLogger('googleapiclient.discovery').setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
+
+# Load environment variables
+if os.path.exists('.env'):
+    from dotenv import load_dotenv
+    load_dotenv()
+    logger.info("Loaded .env file")
+
+# For Replit secrets
+if os.environ.get('REPL_ID'):
+    try:
+        secrets_path = os.path.join(os.environ.get('REPL_HOME', ''), '.config', 'secrets.json')
+        if os.path.exists(secrets_path):
+            with open(secrets_path) as f:
+                secrets = json.load(f)
+                for key, value in secrets.items():
+                    os.environ[key] = value
+            logger.info("Loaded Replit secrets successfully")
+        else:
+            logger.warning(f"Secrets file not found at {secrets_path}")
+    except Exception as e:
+        logger.error(f"Error loading Replit secrets: {str(e)}")
+
+# Verify OpenAI key is loaded
+logger.info(f"OpenAI API key loaded: {bool(os.environ.get('OPENAI_API_KEY'))}")
 
 def create_app():
     """Initialize and configure Flask application"""
@@ -49,6 +83,7 @@ app = create_app()
 # Initialize clients
 slack_bot = SlackBot()
 firebase_client = None
+sheets_client = None
 
 # Initialize Firebase client if credentials are available
 if Config.firebase_config_valid():
@@ -62,6 +97,19 @@ if Config.firebase_config_valid():
     except Exception as e:
         logger.error(f"Failed to initialize Firebase client: {str(e)}")
         firebase_client = None
+
+# Initialize Sheets client if credentials are available
+if Config.sheets_config_valid():
+    try:
+        logger.info("Starting Sheets client initialization...")
+        sheets_client = SheetsClient()
+        if sheets_client.service is None:
+            logger.warning("Sheets client not properly initialized")
+        else:
+            logger.info("Sheets client initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize Sheets client: {str(e)}")
+        sheets_client = None
 
 @app.route('/', methods=['GET'])
 def index():
@@ -130,6 +178,7 @@ def handle_message(event):
         text = event.get('text', '').lower()
         user_id = event.get('user')
         channel_type = event.get('channel_type', '')
+        channel_id = event.get('channel')  # Get the channel/DM ID
         
         logger.debug(f"Processing message from user {user_id}: {text}")
         
@@ -143,7 +192,9 @@ def handle_message(event):
                 # Open EOD report modal
                 trigger_id = event.get('trigger_id')
                 if trigger_id:
-                    slack_bot.send_eod_prompt(trigger_id)
+                    # Pass the channel ID in private_metadata
+                    private_metadata = json.dumps({'channel_id': channel_id})
+                    slack_bot.send_eod_prompt(trigger_id, private_metadata)
                 else:
                     slack_bot.send_message(user_id, "Please use the /eod command to submit your report.")
             elif text.startswith('submit eod:'):
@@ -176,11 +227,16 @@ def handle_app_mention(event):
     try:
         text = event.get('text', '').lower().replace(f'<@{event.get("bot_id", "")}>', '').strip()
         user_id = event.get('user')
+        channel_id = event.get('channel')  # Get the channel ID
         
         logger.debug(f"Processing mention from user {user_id}: {text}")
         
         if 'eod report' in text:
-            slack_bot.send_eod_prompt(user_id)
+            # Pass the channel ID in private_metadata
+            trigger_id = event.get('trigger_id')
+            if trigger_id:
+                private_metadata = json.dumps({'channel_id': channel_id})
+                slack_bot.send_eod_prompt(trigger_id, private_metadata)
         elif text.startswith('submit eod:'):
             handle_eod_submission(event)
         elif 'status' in text:
@@ -221,48 +277,43 @@ def handle_eod_submission(event):
 def slack_commands():
     """Handle Slack slash commands"""
     try:
-        # Verify request signature
-        timestamp = request.headers.get('X-Slack-Request-Timestamp', '')
-        signature = request.headers.get('X-Slack-Signature', '')
-        
-        if not timestamp or not signature:
-            logger.warning("Missing Slack verification headers")
-            return jsonify({'error': 'missing_headers'}), 400
-            
-        if abs(datetime.now().timestamp() - float(timestamp)) > 60 * 5:
-            logger.warning("Request timestamp too old")
-            return jsonify({'error': 'invalid_timestamp'}), 403
-            
-        sig_basestring = f"v0:{timestamp}:{request.get_data(as_text=True)}"
-        my_signature = 'v0=' + hmac.new(
-            Config.SLACK_SIGNING_SECRET.encode(),
-            sig_basestring.encode(),
-            hashlib.sha256
-        ).hexdigest()
-        
-        if not hmac.compare_digest(my_signature, signature):
-            logger.warning("Invalid request signature")
-            return jsonify({'error': 'invalid_signature'}), 403
-        
-        # Process command
+        logger.debug("Incoming POST request to /slack/commands")
         command = request.form.get('command')
+        user_id = request.form.get('user_id')
+        channel_id = request.form.get('channel_id')
         trigger_id = request.form.get('trigger_id')
         
         if command == '/eod':
-            if not trigger_id:
-                return jsonify({'error': 'missing_trigger'}), 400
-                
-            slack_bot.send_eod_prompt(trigger_id)
-            return jsonify({
-                'response_type': 'ephemeral',
-                'text': 'Opening EOD report form...'
-            })
+            # Check for existing report
+            if firebase_client:
+                try:
+                    today = datetime.now(ZoneInfo("America/New_York")).date()
+                    existing_report = firebase_client.get_user_report_for_date(user_id, today)
+                    
+                    if existing_report:
+                        # Send message with interactive buttons
+                        slack_bot.send_already_submitted_message(channel_id, user_id, today)
+                        return ('', 200)  # Return empty 200 response with no content
+                    else:
+                        # No existing report, open the modal
+                        slack_bot.send_eod_prompt(trigger_id)
+                        return jsonify({
+                            'response_type': 'ephemeral',
+                            'text': 'Opening EOD report form...'
+                        })
+                except Exception as e:
+                    logger.error(f"Error checking existing report: {str(e)}")
+                    return jsonify({
+                        'response_type': 'ephemeral',
+                        'text': 'Sorry, there was an error checking your report status.'
+                    }), 500
+            else:
+                logger.error("Firebase client not initialized")
+                return jsonify({
+                    'response_type': 'ephemeral',
+                    'text': 'Sorry, the EOD report system is not properly configured.'
+                }), 500
             
-        return jsonify({
-            'response_type': 'ephemeral',
-            'text': 'Unknown command'
-        })
-        
     except Exception as e:
         logger.error(f"Error handling slash command: {str(e)}")
         return jsonify({
@@ -270,179 +321,136 @@ def slack_commands():
             'text': 'Sorry, something went wrong processing your command.'
         }), 500
 
-@app.route('/slack/interactivity', methods=['POST'])
+@app.route('/slack/interactive-endpoint', methods=['POST'])
 def slack_interactivity():
     """Handle Slack interactive components"""
     try:
-        # Verify request signature
-        timestamp = request.headers.get('X-Slack-Request-Timestamp', '')
-        signature = request.headers.get('X-Slack-Signature', '')
-        
-        if not timestamp or not signature:
-            logger.warning("Missing Slack verification headers")
-            return jsonify({'error': 'missing_headers'}), 400
-            
-        if abs(datetime.now().timestamp() - float(timestamp)) > 60 * 5:
-            logger.warning("Request timestamp too old")
-            return jsonify({'error': 'invalid_timestamp'}), 403
-            
-        sig_basestring = f"v0:{timestamp}:{request.get_data(as_text=True)}"
-        my_signature = 'v0=' + hmac.new(
-            Config.SLACK_SIGNING_SECRET.encode(),
-            sig_basestring.encode(),
-            hashlib.sha256
-        ).hexdigest()
-        
-        if not hmac.compare_digest(my_signature, signature):
-            logger.warning("Invalid request signature")
-            return jsonify({'error': 'invalid_signature'}), 403
-
-        # Verify request body
-        if not request.form or 'payload' not in request.form:
-            logger.warning("Missing payload in request form")
-            return jsonify({'error': 'invalid_request'}), 400
-        
-        # Parse the payload
-        try:
+        if request.form.get('payload'):
             payload = json.loads(request.form['payload'])
-            logger.info(f"Received interactive payload type: {payload.get('type')}")
             logger.debug(f"Full payload: {payload}")
-        except json.JSONDecodeError:
-            logger.error("Failed to parse payload JSON")
-            return jsonify({'error': 'invalid_payload'}), 400
-        
-        # Handle different interaction types
-        interaction_type = payload.get('type')
-        
-        if interaction_type == 'view_submission':
-            # Handle modal submission
-            view = payload.get('view', {})
-            if view.get('callback_id') == 'eod_report_modal':
-                user_id = payload.get('user', {}).get('id')
-                if not user_id:
-                    logger.warning("Missing user_id in modal submission")
-                    return jsonify({'error': 'missing_user'}), 400
+            
+            if payload['type'] == 'view_submission':
+                logger.info("Received view submission")
                 
-                # Extract values from blocks
-                state = view.get('state', {}).get('values', {})
+                # Extract values from the submission
+                values = payload['view']['state']['values']
                 report_data = {
-                    'short_term_projects': state.get('short_term_block', {}).get('short_term_input', {}).get('value', ''),
-                    'long_term_projects': state.get('long_term_block', {}).get('long_term_input', {}).get('value', ''),
-                    'blockers': state.get('blockers_block', {}).get('blockers_input', {}).get('value', ''),
-                    'next_day_goals': state.get('goals_block', {}).get('goals_input', {}).get('value', ''),
-                    'tools_used': state.get('tools_block', {}).get('tools_input', {}).get('value', ''),
-                    'help_needed': state.get('help_block', {}).get('help_input', {}).get('value', ''),
-                    'user_id': user_id,
-                    'created_at': datetime.utcnow().isoformat()
+                    'short_term_projects': values['short_term_block']['short_term_input']['value'],
+                    'long_term_projects': values['long_term_block']['long_term_input']['value'],
+                    'blockers': values['blockers_block']['blockers_input']['value'],
+                    'next_day_goals': values['goals_block']['goals_input']['value'],
+                    'tools_used': values['tools_block']['tools_input']['value'],
+                    'help_needed': values['help_block']['help_input']['value'],
+                    'client_feedback': values['client_feedback_block']['client_feedback_input']['value']
                 }
                 
-                # Save to Firebase
-                if not firebase_client:
-                    logger.error("Firebase client not available")
-                    return jsonify({
-                        'response_action': 'errors',
-                        'errors': {
-                            'short_term_block': 'Service unavailable. Please try again later.'
-                        }
-                    })
-
-                try:
-                    # Save report to Firebase
-                    report_id = firebase_client.save_eod_report(user_id, report_data)
-                    logger.info(f"Saved EOD report with ID: {report_id}")
-                    
-                    # Post to channel
-                    slack_bot.post_report_to_channel(report_data)
-                    logger.info("Posted report to channel")
-                    
-                    # Clear the modal first
-                    logger.info("Clearing modal view")
-                    response = {'response_action': 'clear'}
-                    
-                    # Schedule confirmation message
-                    def send_delayed_confirmation():
-                        try:
-                            slack_bot.send_message(
-                                user_id,
-                                ":white_check_mark: Your EOD report has been submitted successfully! Thank you for your update."
-                            )
-                            logger.info(f"Sent confirmation message to user {user_id}")
-                        except Exception as e:
-                            logger.error(f"Failed to send confirmation message: {str(e)}")
-                    
-                    # Use a background thread to send the confirmation
-                    from threading import Thread
-                    Thread(target=send_delayed_confirmation).start()
-                    
-                    return jsonify(response)
-                    
-                except Exception as e:
-                    logger.error(f"Error processing EOD submission: {str(e)}")
-                    return jsonify({
-                        'response_action': 'errors',
-                        'errors': {
-                            'short_term_block': 'Failed to save report. Please try again.'
-                        }
-                    })
+                user_id = payload['user']['id']
+                report_data['user_id'] = user_id  # Add user_id to report_data
                 
-        elif interaction_type == 'block_actions':
-            # Handle button clicks
-            for action in payload.get('actions', []):
-                if action.get('value') == 'skip_eod':
-                    user_id = payload.get('user', {}).get('id')
-                    if not user_id:
-                        logger.warning("Missing user_id in payload")
-                        return jsonify({'error': 'missing_user'}), 400
+                # Check if this is an edit
+                try:
+                    metadata = json.loads(payload['view'].get('private_metadata', '{}'))
+                    is_edit = metadata.get('is_edit', False)
+                    report_id = metadata.get('report_id')
+                except json.JSONDecodeError:
+                    logger.warning("Invalid private_metadata JSON, treating as new submission")
+                    is_edit = False
+                    report_id = None
 
-                    channel_id = payload.get('channel', {}).get('id')
-                    if not channel_id:
-                        channel_id = payload.get('container', {}).get('channel_id')
-                    
-                    message_ts = payload.get('message', {}).get('ts')
-                    if not message_ts:
-                        logger.warning("Missing message timestamp")
-                        return jsonify({'error': 'missing_timestamp'}), 400
-
-                    # Mark as skipped in tracker
-                    if firebase_client:
-                        tracker = EODTracker(
-                            user_id=user_id,
-                            status='skipped',
-                            timestamp=datetime.utcnow().isoformat()
-                        )
+                # Close the modal immediately
+                response = {"response_action": "clear"}
+                
+                # Create a closure to capture the variables
+                def create_background_task(user_id, report_data, is_edit, report_id):
+                    def background_tasks():
                         try:
-                            firebase_client.save_tracker(tracker.to_dict())
-                            logger.info(f"Saved skip tracker for user {user_id}")
+                            # Save to Firebase
+                            saved_report_id = None
+                            if is_edit and report_id:
+                                firebase_client.update_eod_report(report_id, report_data)
+                                saved_report_id = report_id
+                            else:
+                                saved_report_id = firebase_client.save_eod_report(user_id, report_data)
+
+                            # Update Google Sheets
+                            if sheets_client and sheets_client.service:
+                                try:
+                                    sheets_client.update_submissions(report_data)
+                                    sheets_client.update_tracker()
+                                except Exception as e:
+                                    logger.error(f"Error updating sheets: {str(e)}")
+
+                            # Post to channel
+                            slack_bot.post_report_to_channel(report_data)
+                            
+                            # Send confirmation message to user
+                            action_type = "updated" if is_edit else "submitted"
+                            slack_bot.send_message(user_id, f"Your EOD report has been {action_type} successfully!")
+                            
+                            # Generate weekly summary if in debug mode
+                            try:
+                                if Config.DEBUG:
+                                    from scheduler import generate_weekly_summary
+                                    generate_weekly_summary(app)
+                                    logger.info(f"Generated weekly summary after {action_type} (debug mode)")
+                            except Exception as e:
+                                logger.error(f"Error generating debug weekly summary: {str(e)}")
+                                
                         except Exception as e:
-                            logger.error(f"Failed to save tracker: {str(e)}")
+                            logger.error(f"Error in background tasks: {str(e)}")
+                            slack_bot.send_message(user_id, "There was an error processing your submission. Please try again or contact support.")
+
+                    return background_tasks
+
+                # Start background tasks in a new thread
+                from threading import Thread
+                Thread(target=create_background_task(user_id, report_data, is_edit, report_id)).start()
+                
+                return jsonify(response)
+
+            elif payload['type'] == 'block_actions':
+                # Handle button clicks
+                action_id = payload['actions'][0]['action_id']
+                if action_id in ['view_report', 'edit_report']:
+                    user_id = payload['user']['id']
+                    today = datetime.now(ZoneInfo("America/New_York")).date()
+                    report = firebase_client.get_user_report_for_date(user_id, today)
                     
-                    # Update the original message
-                    try:
-                        slack_bot.client.chat_update(
-                            channel=channel_id,
-                            ts=message_ts,
-                            blocks=[{
-                                "type": "section",
-                                "text": {
-                                    "type": "mrkdwn",
-                                    "text": ":white_check_mark: *EOD report has been skipped for today.*"
-                                }
-                            }]
+                    if not report:
+                        # Handle case where report doesn't exist
+                        return jsonify({
+                            "response_type": "ephemeral",
+                            "text": "Could not find today's report. It may have been deleted."
+                        })
+                    
+                    if action_id == 'edit_report':
+                        metadata = {
+                            'is_edit': True,
+                            'report_id': report['id']
+                        }
+                        slack_bot.send_eod_prompt(
+                            trigger_id=payload['trigger_id'],
+                            private_metadata=json.dumps(metadata),
+                            existing_data=report
                         )
-                        logger.info(f"Updated message for user {user_id}")
-                    except Exception as e:
-                        logger.error(f"Error updating message: {str(e)}")
-                    
-                    return jsonify({
-                        'response_type': 'ephemeral',
-                        'text': 'EOD report skipped for today.'
-                    })
-        
-        return jsonify({'status': 'ok'})
-        
+                    else:  # view_report
+                        # Show report in a message
+                        channel_id = payload['container']['channel_id']
+                        formatted_report = slack_bot._format_report_for_channel(report)
+                        slack_bot.client.chat_postEphemeral(
+                            channel=channel_id,
+                            user=user_id,
+                            text=formatted_report,
+                            parse='mrkdwn'
+                        )
+                        
+                    return jsonify({"message": "Processing action"})
+
     except Exception as e:
-        logger.error(f"Error handling interactive component: {str(e)}")
-        return jsonify({'error': 'internal_error'}), 500
+        logger.error(f"Error in slack_interactivity: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+    return jsonify({"message": "Success"}), 200
 
 @app.route('/dashboard')
 def dashboard():
@@ -480,8 +488,11 @@ if __name__ == '__main__':
             setup_scheduler(app)
             logger.info("Scheduler setup complete")
             
-            logger.info("Starting Flask server...")
-            app.run(host='0.0.0.0', port=5000, debug=True)
+            # Get port from environment variable or default to 5000
+            port = int(os.environ.get('PORT', 5000))
+            
+            logger.info(f"Starting Flask server on port {port}...")
+            app.run(host='0.0.0.0', port=port, debug=False)
         except Exception as e:
             logger.error(f"Failed to start application: {str(e)}")
             raise

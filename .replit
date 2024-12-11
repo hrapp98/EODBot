@@ -1,4 +1,4 @@
-modules = ["python-3.11"]
+modules = ["nodejs-20", "python-3.11"]
 
 [nix]
 channel = "stable-24_05"
@@ -31,8 +31,11 @@ args = "python app.py"
 waitForPort = 5000
 
 [deployment]
-run = ["sh", "-c", "python app.py"]
+run = ["sh", "-c", "PORT=3000 python app.py"]
 
 [[ports]]
-localPort = 5000
+localPort = 3000
 externalPort = 80
+
+[env]
+PYTHONUNBUFFERED = "1"
