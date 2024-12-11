@@ -1,16 +1,32 @@
-from flask import Flask, request, jsonify, render_template
+# Apply gevent monkey patch at the very beginning
+from gevent import monkey
+monkey.patch_all()
+
+import os
 from datetime import datetime
 import hmac
 import hashlib
 import logging
 import json
-import os
+from zoneinfo import ZoneInfo
+import traceback
+
+# Configure logging first
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
+logger = logging.getLogger(__name__)
+
+# Import Flask and other dependencies after monkey patching
+from flask import Flask, request, jsonify, render_template
 from config import Config
 from models import EODReport, SubmissionTracker, EODTracker
 from slack_bot import SlackBot
 from firebase_client import FirebaseClient
 from google.cloud import firestore
-from zoneinfo import ZoneInfo
 from sheets_client import SheetsClient
 
 # Set up logging first
@@ -483,16 +499,95 @@ def dashboard():
 if __name__ == '__main__':
     with app.app_context():
         try:
+            # Stage 1: Initialize components
+            logger.info("=== Stage 1: Initializing Components ===")
+            
+            # Initialize scheduler
             logger.info("Setting up scheduler...")
-            from scheduler import setup_scheduler
-            setup_scheduler(app)
-            logger.info("Scheduler setup complete")
+            try:
+                from scheduler import setup_scheduler
+                scheduler = setup_scheduler(app)
+                if scheduler:
+                    logger.info("Scheduler setup complete")
+                else:
+                    logger.warning("Scheduler setup returned None, continuing without scheduler")
+            except Exception as scheduler_error:
+                logger.error(f"Scheduler setup failed: {str(scheduler_error)}")
+                logger.error(traceback.format_exc())
+                logger.warning("Continuing without scheduler")
             
-            # Get port from environment variable or default to 5000
+            # Stage 2: Initialize Firebase if not already done
+            logger.info("=== Stage 2: Initializing Firebase ===")
+            if not firebase_client or not firebase_client.db:
+                try:
+                    from extensions import init_firebase
+                    db = init_firebase(Config)
+                    if db:
+                        global firebase_client
+                        firebase_client = FirebaseClient(db)
+                        logger.info("Firebase reinitialized successfully")
+                    else:
+                        logger.error("Failed to reinitialize Firebase")
+                except Exception as fb_error:
+                    logger.error(f"Firebase initialization error: {str(fb_error)}")
+                    logger.error(traceback.format_exc())
+            
+            # Stage 3: Verify component status
+            logger.info("=== Stage 3: Verifying Components ===")
+            
+            # Verify Firebase
+            if not firebase_client:
+                logger.warning("Firebase client not initialized")
+            elif not firebase_client.db:
+                logger.warning("Firebase client initialized but database connection failed")
+            else:
+                logger.info("Firebase client verification successful")
+                
+            # Verify Sheets client
+            if not sheets_client:
+                logger.warning("Sheets client not initialized")
+            elif not sheets_client.service:
+                logger.warning("Sheets client initialized but service connection failed")
+            else:
+                logger.info("Sheets client verification successful")
+                
+            # Verify Slack bot
+            if not slack_bot:
+                logger.warning("Slack bot not initialized")
+            elif not slack_bot.client:
+                logger.warning("Slack bot initialized but client connection failed")
+            else:
+                logger.info("Slack bot verification successful")
+            
+            # Stage 4: Start server
+            logger.info("=== Stage 4: Starting Server ===")
             port = int(os.environ.get('PORT', 5000))
+            logger.info(f"Starting Flask server on port {port} in production mode...")
             
-            logger.info(f"Starting Flask server on port {port}...")
-            app.run(host='0.0.0.0', port=port, debug=False)
+            try:
+                # Server startup with gevent WSGI
+                from gevent.pywsgi import WSGIServer
+                http_server = WSGIServer(('0.0.0.0', port), app, log=app.logger)
+                logger.info("WSGI Server configured successfully")
+                logger.info(f"Starting server on port {port}...")
+                http_server.serve_forever()
+                
+            except ImportError as imp_err:
+                logger.error(f"Failed to import required modules: {str(imp_err)}")
+                logger.error(traceback.format_exc())
+                raise
+                
+            except OSError as os_err:
+                logger.error(f"Failed to bind to port {port}: {str(os_err)}")
+                logger.error(traceback.format_exc())
+                raise
+                
+            except Exception as server_error:
+                logger.error(f"Failed to start WSGI server: {str(server_error)}")
+                logger.error(traceback.format_exc())
+                raise
+                
         except Exception as e:
-            logger.error(f"Failed to start application: {str(e)}")
-            raise
+            logger.error(f"Critical failure during application startup: {str(e)}")
+            logger.error(traceback.format_exc())
+            sys.exit(1)
