@@ -206,6 +206,9 @@ def handle_eod_submission(event):
 def slack_commands():
     """Handle Slack slash commands"""
     try:
+        logger.info("Received Slack command request")
+        logger.debug(f"Headers: {dict(request.headers)}")
+        logger.debug(f"Form data: {dict(request.form)}")
         # Verify request signature
         timestamp = request.headers.get('X-Slack-Request-Timestamp', '')
         signature = request.headers.get('X-Slack-Signature', '')
