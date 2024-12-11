@@ -10,6 +10,7 @@ import logging
 import json
 from zoneinfo import ZoneInfo
 import traceback
+import sys
 
 # Configure logging first
 logging.basicConfig(
@@ -96,6 +97,9 @@ def create_app():
 
 app = create_app()
 
+# Global declarations
+global slack_bot, firebase_client, sheets_client
+
 # Initialize clients
 slack_bot = SlackBot()
 firebase_client = None
@@ -112,6 +116,7 @@ if Config.firebase_config_valid():
             logger.info("Firebase client initialized successfully with Firestore access")
     except Exception as e:
         logger.error(f"Failed to initialize Firebase client: {str(e)}")
+        logger.error(traceback.format_exc())
         firebase_client = None
 
 # Initialize Sheets client if credentials are available
@@ -518,12 +523,12 @@ if __name__ == '__main__':
             
             # Stage 2: Initialize Firebase if not already done
             logger.info("=== Stage 2: Initializing Firebase ===")
+            global firebase_client
             if not firebase_client or not firebase_client.db:
                 try:
                     from extensions import init_firebase
                     db = init_firebase(Config)
                     if db:
-                        global firebase_client
                         firebase_client = FirebaseClient(db)
                         logger.info("Firebase reinitialized successfully")
                     else:
