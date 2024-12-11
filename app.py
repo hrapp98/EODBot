@@ -267,52 +267,96 @@ def slack_commands():
 def slack_interactivity():
     """Handle Slack interactive components"""
     try:
-        # Verify request
-        if not request.form:
+        # Verify request signature
+        timestamp = request.headers.get('X-Slack-Request-Timestamp', '')
+        signature = request.headers.get('X-Slack-Signature', '')
+        
+        if not timestamp or not signature:
+            logger.warning("Missing Slack verification headers")
+            return jsonify({'error': 'missing_headers'}), 400
+            
+        if abs(datetime.now().timestamp() - float(timestamp)) > 60 * 5:
+            logger.warning("Request timestamp too old")
+            return jsonify({'error': 'invalid_timestamp'}), 403
+            
+        sig_basestring = f"v0:{timestamp}:{request.get_data(as_text=True)}"
+        my_signature = 'v0=' + hmac.new(
+            Config.SLACK_SIGNING_SECRET.encode(),
+            sig_basestring.encode(),
+            hashlib.sha256
+        ).hexdigest()
+        
+        if not hmac.compare_digest(my_signature, signature):
+            logger.warning("Invalid request signature")
+            return jsonify({'error': 'invalid_signature'}), 403
+
+        # Verify request body
+        if not request.form or 'payload' not in request.form:
+            logger.warning("Missing payload in request form")
             return jsonify({'error': 'invalid_request'}), 400
         
         # Parse the payload
-        payload = json.loads(request.form.get('payload', '{}'))
-        logger.debug(f"Received interactive payload: {payload}")
+        try:
+            payload = json.loads(request.form['payload'])
+            logger.info(f"Received interactive payload type: {payload.get('type')}")
+            logger.debug(f"Full payload: {payload}")
+        except json.JSONDecodeError:
+            logger.error("Failed to parse payload JSON")
+            return jsonify({'error': 'invalid_payload'}), 400
         
         if payload.get('type') == 'block_actions':
             # Handle button clicks
             for action in payload.get('actions', []):
                 if action.get('value') == 'skip_eod':
                     user_id = payload.get('user', {}).get('id')
-                    channel_id = payload.get('container', {}).get('channel_id')
-                    if user_id:
-                        # Mark as skipped in tracker
-                        if firebase_client:
-                            tracker = EODTracker(
-                                user_id=user_id,
-                                status='skipped',
-                                timestamp=datetime.utcnow().isoformat()
-                            )
-                            firebase_client.save_tracker(tracker.to_dict())
-                        
-                        # Update the original message
+                    if not user_id:
+                        logger.warning("Missing user_id in payload")
+                        return jsonify({'error': 'missing_user'}), 400
+
+                    channel_id = payload.get('channel', {}).get('id')
+                    if not channel_id:
+                        channel_id = payload.get('container', {}).get('channel_id')
+                    
+                    message_ts = payload.get('message', {}).get('ts')
+                    if not message_ts:
+                        logger.warning("Missing message timestamp")
+                        return jsonify({'error': 'missing_timestamp'}), 400
+
+                    # Mark as skipped in tracker
+                    if firebase_client:
+                        tracker = EODTracker(
+                            user_id=user_id,
+                            status='skipped',
+                            timestamp=datetime.utcnow().isoformat()
+                        )
                         try:
-                            slack_bot.client.chat_update(
-                                channel=channel_id,
-                                ts=payload.get('message', {}).get('ts'),
-                                text="EOD report has been skipped for today.",
-                                blocks=[{
-                                    "type": "section",
-                                    "text": {
-                                        "type": "mrkdwn",
-                                        "text": ":white_check_mark: *EOD report has been skipped for today.*"
-                                    }
-                                }]
-                            )
+                            firebase_client.save_tracker(tracker.to_dict())
+                            logger.info(f"Saved skip tracker for user {user_id}")
                         except Exception as e:
-                            logger.error(f"Error updating message: {str(e)}")
-                        
-                        return jsonify({
-                            'response_type': 'ephemeral',
-                            'text': 'EOD report skipped for today.',
-                            'replace_original': False
-                        })
+                            logger.error(f"Failed to save tracker: {str(e)}")
+                    
+                    # Update the original message
+                    try:
+                        slack_bot.client.chat_update(
+                            channel=channel_id,
+                            ts=message_ts,
+                            blocks=[{
+                                "type": "section",
+                                "text": {
+                                    "type": "mrkdwn",
+                                    "text": ":white_check_mark: *EOD report has been skipped for today.*"
+                                }
+                            }]
+                        )
+                        logger.info(f"Updated message for user {user_id}")
+                    except Exception as e:
+                        logger.error(f"Error updating message: {str(e)}")
+                        # Continue execution to at least acknowledge the interaction
+                    
+                    return jsonify({
+                        'response_type': 'ephemeral',
+                        'text': 'EOD report skipped for today.'
+                    })
         
         return jsonify({'status': 'ok'})
         

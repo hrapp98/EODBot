@@ -45,15 +45,36 @@ class SlackBot:
                 },
                 {
                     "type": "actions",
+                    "block_id": "skip_eod_block",
                     "elements": [
                         {
                             "type": "button",
                             "text": {
                                 "type": "plain_text",
-                                "text": "Skip Today"
+                                "text": "Skip Today",
+                                "emoji": true
                             },
+                            "action_id": "skip_eod_action",
+                            "value": "skip_eod",
                             "style": "danger",
-                            "value": "skip_eod"
+                            "confirm": {
+                                "title": {
+                                    "type": "plain_text",
+                                    "text": "Skip EOD Report"
+                                },
+                                "text": {
+                                    "type": "plain_text",
+                                    "text": "Are you sure you want to skip today's EOD report?"
+                                },
+                                "confirm": {
+                                    "type": "plain_text",
+                                    "text": "Yes, Skip Today"
+                                },
+                                "deny": {
+                                    "type": "plain_text",
+                                    "text": "No, Cancel"
+                                }
+                            }
                         }
                     ]
                 }
