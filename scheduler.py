@@ -219,9 +219,3 @@ def generate_weekly_summary(app):
                 
         except Exception as e:
             logger.error(f"Error generating weekly summaries: {str(e)}")
-
-def get_active_users():
-    """Get list of active users"""
-    # This should be implemented based on your user management system
-    # For now, return a test user
-    return ["U12345"]
