@@ -31,14 +31,10 @@ args = "gunicorn app:app --bind 0.0.0.0:5000 --workers 1 --threads 2 --worker-cl
 waitForPort = 5000
 
 [deployment]
-run = ["sh", "-c", "PORT=3000 python app.py"]
+run = ["sh", "-c", "gunicorn app:app --bind 0.0.0.0:3000 --workers 1 --threads 2 --worker-class gthread --worker-connections 50 --timeout 120 --keep-alive 5"]
 
 [[ports]]
 localPort = 3000
-externalPort = 3000
-
-[[ports]]
-localPort = 5000
 externalPort = 80
 
 [env]
