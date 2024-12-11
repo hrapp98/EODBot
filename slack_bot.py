@@ -10,51 +10,28 @@ logger = logging.getLogger(__name__)
 class SlackBot:
     def __init__(self):
         self.client = WebClient(token=Config.SLACK_BOT_OAUTH_TOKEN)
+        self._ensure_in_channels()
     
     def _ensure_in_channels(self):
-        """Ensure bot is in required channels - kept for documentation"""
-        # Example of how to join channels if needed in the future:
-        """
+        """Ensure bot is in required channels"""
         try:
-            channel_name = Config.SLACK_WEEKLY_SUMMARY_CHANNEL.lstrip('#')
-            logger.debug(f"Looking for channel: {channel_name}")
-            
-            # First get the channel ID
+            # Try to join the weekly summary channel
             try:
-                response = self.client.conversations_list(types="public_channel,private_channel")
-                channel_id = None
-                
-                for channel in response['channels']:
-                    if channel['name'] == channel_name:
-                        channel_id = channel['id']
-                        logger.debug(f"Found channel ID: {channel_id} for channel: {channel_name}")
-                        break
-                
-                if not channel_id:
-                    logger.error(f"Channel '{channel_name}' not found in workspace")
-                    return
-                
-                # Try to join the channel
-                try:
-                    response = self.client.conversations_join(channel=channel_id)
-                    if response['ok']:
-                        logger.info(f"Successfully joined channel {channel_name}")
-                except SlackApiError as e:
-                    if e.response['error'] == 'is_archived':
-                        logger.error(f"Channel {channel_name} is archived")
-                    elif e.response['error'] == 'already_in_channel':
-                        logger.debug(f"Already in channel {channel_name}")
-                    else:
-                        logger.error(f"Error joining channel: {e.response['error']}")
-                        
+                response = self.client.conversations_join(
+                    channel=Config.SLACK_WEEKLY_SUMMARY_CHANNEL
+                )
+                if response['ok']:
+                    logger.info(f"Successfully joined channel {Config.SLACK_WEEKLY_SUMMARY_CHANNEL}")
             except SlackApiError as e:
-                logger.error(f"Error getting channel list: {e.response['error']}")
-                
+                if e.response['error'] == 'is_archived':
+                    logger.error(f"Channel {Config.SLACK_WEEKLY_SUMMARY_CHANNEL} is archived")
+                elif e.response['error'] == 'channel_not_found':
+                    logger.error(f"Channel {Config.SLACK_WEEKLY_SUMMARY_CHANNEL} not found. Please create it and invite the bot.")
+                else:
+                    logger.error(f"Error joining channel: {e.response['error']}")
         except Exception as e:
             logger.error(f"Error ensuring channel membership: {str(e)}")
-        """
-        pass
-    
+
     def send_eod_prompt(self, trigger_id, private_metadata=None, existing_data=None):
         """Send EOD report modal"""
         try:
@@ -365,13 +342,6 @@ class SlackBot:
     def get_channel_members(self, channel_id):
         """Get list of members in a channel"""
         try:
-            # First, try to join the channel if not already a member
-            try:
-                self.client.conversations_join(channel=channel_id)
-            except SlackApiError as e:
-                if e.response['error'] not in ['already_in_channel', 'is_archived']:
-                    logger.error(f"Error joining channel: {e.response['error']}")
-
             # Get channel info including members
             response = self.client.conversations_members(channel=channel_id)
             members = response['members']
@@ -379,14 +349,10 @@ class SlackBot:
             # Filter out bots and inactive users
             active_members = []
             for member in members:
-                try:
-                    user_info = self.client.users_info(user=member)['user']
-                    if not user_info.get('is_bot', False) and not user_info.get('deleted', False):
-                        active_members.append(member)
-                except SlackApiError as e:
-                    logger.error(f"Error getting user info for {member}: {e.response['error']}")
-                    continue
-            
+                user_info = self.client.users_info(user=member)['user']
+                if not user_info.get('is_bot', False) and not user_info.get('deleted', False):
+                    active_members.append(member)
+                
             logger.info(f"Found {len(active_members)} active members in channel {channel_id}")
             return active_members
             

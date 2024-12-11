@@ -319,16 +319,9 @@ class FirebaseClient:
     def _get_active_users(self):
         """Get list of active users"""
         try:
-            # Import slack_bot here to avoid circular import
-            from slack_client import SlackClient
-            slack_client = SlackClient(Config.SLACK_BOT_OAUTH_TOKEN)
-            channel_members = slack_client.get_channel_members(Config.SLACK_CHANNEL)
-            
-            if not channel_members:
-                logger.error("No active users found in channel")
-                return []
-            
-            logger.info(f"Found {len(channel_members)} active users in channel")
+            # Get users from Slack channel
+            from app import slack_bot
+            channel_members = slack_bot.get_channel_members(Config.SLACK_CHANNEL)
             return channel_members
             
         except Exception as e:
