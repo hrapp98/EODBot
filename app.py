@@ -3,11 +3,12 @@ from datetime import datetime
 import hmac
 import hashlib
 import logging
+import json
+import os
 from config import Config
 from models import EODReport, SubmissionTracker
 from slack_bot import SlackBot
 from firebase_client import FirebaseClient
-import os
 from firebase_admin import firestore
 
 # Set up logging with more detailed formatting
@@ -128,21 +129,39 @@ def handle_message(event):
     try:
         text = event.get('text', '').lower()
         user_id = event.get('user')
+        channel_type = event.get('channel_type', '')
         
         logger.debug(f"Processing message from user {user_id}: {text}")
         
-        if text == 'eod report':
-            # Send EOD report prompt
-            slack_bot.send_eod_prompt(user_id)
-        elif text.startswith('submit eod:'):
-            # Handle EOD submission
-            handle_eod_submission(event)
-        elif text == 'status':
-            # Check submission status
-            slack_bot.send_status_update(user_id)
-        elif text == 'help':
-            # Send help message
-            slack_bot.send_help_message(user_id)
+        # Skip if this is a bot message
+        if event.get('bot_id') or event.get('subtype') == 'bot_message':
+            return
+            
+        # Handle direct messages
+        if channel_type == 'im':
+            if text == 'eod report':
+                # Send EOD report prompt
+                slack_bot.send_eod_prompt(user_id)
+            elif text.startswith('submit eod:'):
+                # Handle EOD submission
+                handle_eod_submission(event)
+            elif text == 'status':
+                # Check submission status
+                slack_bot.send_status_update(user_id)
+            elif text == 'help':
+                # Send help message
+                slack_bot.send_help_message(user_id)
+            else:
+                # Try to parse as EOD report
+                try:
+                    report = EODReport.create_from_text(user_id, text)
+                    if firebase_client:
+                        firebase_client.save_eod_report(user_id, report.to_dict())
+                        slack_bot.post_report_to_channel(report.to_dict())
+                        slack_bot.send_message(user_id, "Thank you! Your EOD report has been submitted.")
+                except Exception as e:
+                    logger.error(f"Error processing EOD report: {str(e)}")
+                    slack_bot.send_message(user_id, "I couldn't process that as an EOD report. Try using the format shown in the prompt, or type 'help' for instructions.")
             
     except Exception as e:
         logger.error(f"Error handling message: {str(e)}")
@@ -245,6 +264,63 @@ def slack_commands():
         }), 500
 
 @app.route('/dashboard')
+@app.route('/slack/interactivity', methods=['POST'])
+def slack_interactivity():
+    """Handle Slack interactive components"""
+    try:
+        # Verify request signature
+        timestamp = request.headers.get('X-Slack-Request-Timestamp', '')
+        signature = request.headers.get('X-Slack-Signature', '')
+        
+        if not timestamp or not signature:
+            logger.warning("Missing Slack verification headers")
+            return jsonify({'error': 'missing_headers'}), 400
+            
+        if abs(datetime.now().timestamp() - float(timestamp)) > 60 * 5:
+            logger.warning("Request timestamp too old")
+            return jsonify({'error': 'invalid_timestamp'}), 403
+            
+        sig_basestring = f"v0:{timestamp}:{request.get_data(as_text=True)}"
+        my_signature = 'v0=' + hmac.new(
+            Config.SLACK_SIGNING_SECRET.encode(),
+            sig_basestring.encode(),
+            hashlib.sha256
+        ).hexdigest()
+        
+        if not hmac.compare_digest(my_signature, signature):
+            logger.warning("Invalid request signature")
+            return jsonify({'error': 'invalid_signature'}), 403
+        
+        # Parse the payload
+        payload = json.loads(request.form.get('payload', '{}'))
+        
+        if payload.get('type') == 'block_actions':
+            # Handle button clicks
+            for action in payload.get('actions', []):
+                if action.get('value') == 'skip_eod':
+                    user_id = payload.get('user', {}).get('id')
+                    if user_id:
+                        # Mark as skipped in tracker
+                        if firebase_client:
+                            tracker = SubmissionTracker(
+                                user_id=user_id,
+                                date=datetime.utcnow().date(),
+                                submitted=True,
+                                reminder_count=0
+                            )
+                            firebase_client.save_tracker(tracker.to_dict())
+                        
+                        return jsonify({
+                            'response_type': 'ephemeral',
+                            'text': 'EOD report skipped for today.'
+                        })
+        
+        return jsonify({'status': 'ok'})
+        
+    except Exception as e:
+        logger.error(f"Error handling interactive component: {str(e)}")
+        return jsonify({'error': 'internal_error'}), 500
+
 def dashboard():
     """Render submission status dashboard"""
     try:
