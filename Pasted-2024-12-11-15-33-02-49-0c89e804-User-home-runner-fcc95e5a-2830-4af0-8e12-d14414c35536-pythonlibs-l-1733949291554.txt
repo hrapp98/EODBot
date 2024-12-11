@@ -1,0 +1,84 @@
+2024-12-11 15:33:02.49
+0c89e804
+User
+/home/runner/fcc95e5a-2830-4af0-8e12-d14414c35536/.pythonlibs/lib/python3.11/site-packages/tzlocal/unix.py:193: UserWarning: Can not find any timezone configuration, defaulting to UTC.
+2024-12-11 15:33:02.49
+0c89e804
+User
+warnings.warn("Can not find any timezone configuration, defaulting to UTC.")
+2024-12-11 15:33:02.80
+0c89e804
+User
+2024-12-11 20:33:02 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2024-12-11 15:33:02.80
+0c89e804
+User
+2024-12-11 20:33:02 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2024-12-11 15:33:02.81
+0c89e804
+User
+2024-12-11 20:33:02 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2024-12-11 15:33:02.81
+0c89e804
+User
+2024-12-11 20:33:02 [INFO] apscheduler.scheduler: Added job "send_eod_prompts" to job store "default"
+2024-12-11 15:33:02.81
+0c89e804
+User
+2024-12-11 20:33:02 [INFO] apscheduler.scheduler: Added job "send_reminders" to job store "default"
+2024-12-11 15:33:02.81
+0c89e804
+User
+2024-12-11 20:33:02 [INFO] apscheduler.scheduler: Added job "generate_weekly_summary" to job store "default"
+2024-12-11 15:33:02.81
+0c89e804
+User
+2024-12-11 20:33:02 [INFO] apscheduler.scheduler: Scheduler started
+2024-12-11 15:33:02.81
+0c89e804
+User
+2024-12-11 20:33:02 [INFO] __main__: Scheduler setup completed successfully
+2024-12-11 15:33:02.81
+0c89e804
+User
+2024-12-11 20:33:02 [INFO] __main__: Application initialization completed successfully
+2024-12-11 15:33:02.82
+0c89e804
+User
+* Serving Flask app 'app'
+2024-12-11 15:33:02.82
+0c89e804
+User
+* Debug mode: off
+2024-12-11 15:33:02.90
+0c89e804
+User
+2024-12-11 20:33:02 [INFO] werkzeug: WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+2024-12-11 15:33:02.90
+0c89e804
+User
+* Running on all addresses (0.0.0.0)
+2024-12-11 15:33:02.90
+0c89e804
+User
+* Running on http://127.0.0.1:3000
+2024-12-11 15:33:02.90
+0c89e804
+User
+* Running on http://10.3.254.124:3000
+2024-12-11 15:33:02.90
+0c89e804
+User
+2024-12-11 20:33:02 [INFO] werkzeug: Press CTRL+C to quit
+2024-12-11 15:33:10.41
+0c89e804
+User
+2024-12-11 20:33:10 [INFO] werkzeug: 127.0.0.1 - - [11/Dec/2024 20:33:10] "GET / HTTP/1.1" 200 -
+2024-12-11 15:33:12.75
+6d2a7bff
+System
+system: received signal terminated
+2024-12-11 15:33:12.79
+6d2a7bff
+System
+command finished with error [sh -c PORT=3000 python app.py]: signal: terminated

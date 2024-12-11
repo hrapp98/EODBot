@@ -1,0 +1,119 @@
+kill $(lsof -t -i:3000) 2>/dev/null || true && gunicorn app:app --bi000 --workers 4 --threads 2 --worker-class gthread~/EODSlackBot$ kil
+~/EODSlackBot$ kill $(lsof -t -i:3000) 2>/dev/null || true && gunicorn app:app --bind 0.0.0.0:3000 --workers 4 --threads 2 --worker-class gthread
+bash: lsof: command not found
+[2024-12-11 20:35:54 +0000] [4541] [INFO] Starting gunicorn 23.0.0
+[2024-12-11 20:35:54 +0000] [4541] [INFO] Listening at: http://0.0.0.0:3000 (4541)
+[2024-12-11 20:35:54 +0000] [4541] [INFO] Using worker: gthread
+[2024-12-11 20:35:54 +0000] [4546] [INFO] Booting worker with pid: 4546
+[2024-12-11 20:35:54 +0000] [4547] [INFO] Booting worker with pid: 4547
+[2024-12-11 20:35:54 +0000] [4548] [INFO] Booting worker with pid: 4548
+[2024-12-11 20:35:54 +0000] [4549] [INFO] Booting worker with pid: 4549
+[2024-12-11 20:35:54 +0000] [4541] [INFO] Handling signal: winch
+2024-12-11 20:35:54 [WARNING] app: Secrets file not found at /home/runner/EODSlackBot/.config/secrets.json
+2024-12-11 20:35:54 [INFO] app: OpenAI API key loaded: True
+2024-12-11 20:35:54 [INFO] app: Creating Flask application...
+2024-12-11 20:35:54 [INFO] app: Application creation successful
+2024-12-11 20:35:54 [WARNING] app: Secrets file not found at /home/runner/EODSlackBot/.config/secrets.json
+2024-12-11 20:35:54 [INFO] app: OpenAI API key loaded: True
+2024-12-11 20:35:54 [INFO] app: Creating Flask application...
+2024-12-11 20:35:54 [INFO] app: Application creation successful
+2024-12-11 20:35:54 [WARNING] app: Secrets file not found at /home/runner/EODSlackBot/.config/secrets.json
+2024-12-11 20:35:54 [INFO] app: OpenAI API key loaded: True
+2024-12-11 20:35:54 [INFO] app: Creating Flask application...
+2024-12-11 20:35:54 [INFO] app: Application creation successful
+2024-12-11 20:35:54 [WARNING] app: Secrets file not found at /home/runner/EODSlackBot/.config/secrets.json
+2024-12-11 20:35:54 [INFO] app: OpenAI API key loaded: True
+2024-12-11 20:35:54 [INFO] app: Creating Flask application...
+2024-12-11 20:35:54 [INFO] app: Application creation successful
+2024-12-11 20:35:54 [ERROR] slack_bot: Channel weekly-progress-summaries not found. Please create it and invite the bot.
+2024-12-11 20:35:54 [INFO] app: Starting Firebase client initialization...
+2024-12-11 20:35:54 [INFO] firebase_client: Initializing Firebase client...
+2024-12-11 20:35:54 [INFO] firebase_client: Attempting to initialize Firebase with credentials...
+2024-12-11 20:35:54 [ERROR] slack_bot: Channel weekly-progress-summaries not found. Please create it and invite the bot.
+2024-12-11 20:35:54 [INFO] app: Starting Firebase client initialization...
+2024-12-11 20:35:54 [INFO] firebase_client: Initializing Firebase client...
+2024-12-11 20:35:54 [INFO] firebase_client: Attempting to initialize Firebase with credentials...
+2024-12-11 20:35:54 [ERROR] slack_bot: Channel weekly-progress-summaries not found. Please create it and invite the bot.
+2024-12-11 20:35:54 [INFO] app: Starting Firebase client initialization...
+2024-12-11 20:35:54 [INFO] firebase_client: Initializing Firebase client...
+2024-12-11 20:35:54 [INFO] firebase_client: Firebase app initialized successfully
+2024-12-11 20:35:54 [INFO] firebase_client: Attempting to initialize Firebase with credentials...
+2024-12-11 20:35:54 [INFO] firebase_client: Firebase app initialized successfully
+2024-12-11 20:35:54 [INFO] firebase_client: Firebase app initialized successfully
+2024-12-11 20:35:55 [ERROR] slack_bot: Channel weekly-progress-summaries not found. Please create it and invite the bot.
+2024-12-11 20:35:55 [INFO] app: Starting Firebase client initialization...
+2024-12-11 20:35:55 [INFO] firebase_client: Initializing Firebase client...
+2024-12-11 20:35:55 [INFO] firebase_client: Attempting to initialize Firebase with credentials...
+2024-12-11 20:35:55 [INFO] firebase_client: Firebase app initialized successfully
+2024-12-11 20:35:55 [INFO] firebase_client: Firestore client initialized and verified successfully
+2024-12-11 20:35:55 [INFO] app: Firebase client initialized successfully with Firestore access
+2024-12-11 20:35:55 [INFO] app: Starting Sheets client initialization...
+2024-12-11 20:35:55 [INFO] firebase_client: Firestore client initialized and verified successfully
+2024-12-11 20:35:55 [INFO] app: Firebase client initialized successfully with Firestore access
+2024-12-11 20:35:55 [INFO] app: Starting Sheets client initialization...
+2024-12-11 20:35:55 [INFO] googleapiclient.discovery_cache: file_cache is only supported with oauth2client<4.0.0
+2024-12-11 20:35:55 [INFO] firebase_client: Firestore client initialized and verified successfully
+2024-12-11 20:35:55 [INFO] googleapiclient.discovery_cache: file_cache is only supported with oauth2client<4.0.0
+2024-12-11 20:35:55 [INFO] firebase_client: Firestore client initialized and verified successfully
+2024-12-11 20:35:55 [INFO] firebase_client: Firestore client initialized and verified successfully
+2024-12-11 20:35:55 [INFO] app: Firebase client initialized successfully with Firestore access
+2024-12-11 20:35:55 [INFO] app: Starting Sheets client initialization...
+2024-12-11 20:35:55 [INFO] firebase_client: Firestore client initialized and verified successfully
+2024-12-11 20:35:55 [INFO] app: Firebase client initialized successfully with Firestore access
+2024-12-11 20:35:55 [INFO] app: Starting Sheets client initialization...
+2024-12-11 20:35:55 [INFO] googleapiclient.discovery_cache: file_cache is only supported with oauth2client<4.0.0
+2024-12-11 20:35:55 [INFO] firebase_client: Firestore client initialized and verified successfully
+2024-12-11 20:35:55 [INFO] googleapiclient.discovery_cache: file_cache is only supported with oauth2client<4.0.0
+2024-12-11 20:35:55 [INFO] firebase_client: Firestore client initialized and verified successfully
+2024-12-11 20:35:56 [INFO] app: Sheets client initialized successfully
+2024-12-11 20:35:56 [INFO] app: Starting application initialization...
+2024-12-11 20:35:56 [INFO] app: Checking environment configuration...
+2024-12-11 20:35:56 [INFO] app: Setting up scheduler in application context...
+2024-12-11 20:35:56 [INFO] app: Sheets client initialized successfully
+2024-12-11 20:35:56 [INFO] app: Starting application initialization...
+2024-12-11 20:35:56 [INFO] app: Checking environment configuration...
+2024-12-11 20:35:56 [INFO] app: Setting up scheduler in application context...
+2024-12-11 20:35:56 [INFO] app: Sheets client initialized successfully
+2024-12-11 20:35:56 [INFO] app: Sheets client initialized successfully
+2024-12-11 20:35:56 [INFO] app: Starting application initialization...
+2024-12-11 20:35:56 [INFO] app: Checking environment configuration...
+2024-12-11 20:35:56 [INFO] app: Setting up scheduler in application context...
+2024-12-11 20:35:56 [INFO] app: Starting application initialization...
+2024-12-11 20:35:56 [INFO] app: Checking environment configuration...
+2024-12-11 20:35:56 [INFO] app: Setting up scheduler in application context...
+2024-12-11 20:35:56 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2024-12-11 20:35:56 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2024-12-11 20:35:56 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2024-12-11 20:35:56 [INFO] apscheduler.scheduler: Added job "send_eod_prompts" to job store "default"
+2024-12-11 20:35:56 [INFO] apscheduler.scheduler: Added job "send_reminders" to job store "default"
+2024-12-11 20:35:56 [INFO] apscheduler.scheduler: Added job "generate_weekly_summary" to job store "default"
+2024-12-11 20:35:56 [INFO] apscheduler.scheduler: Scheduler started
+2024-12-11 20:35:56 [INFO] app: Scheduler setup completed successfully
+2024-12-11 20:35:56 [INFO] app: Application initialization completed successfully
+2024-12-11 20:35:56 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2024-12-11 20:35:56 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2024-12-11 20:35:56 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2024-12-11 20:35:56 [INFO] apscheduler.scheduler: Added job "send_eod_prompts" to job store "default"
+2024-12-11 20:35:56 [INFO] apscheduler.scheduler: Added job "send_reminders" to job store "default"
+2024-12-11 20:35:56 [INFO] apscheduler.scheduler: Added job "generate_weekly_summary" to job store "default"
+2024-12-11 20:35:56 [INFO] apscheduler.scheduler: Scheduler started
+2024-12-11 20:35:56 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2024-12-11 20:35:56 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2024-12-11 20:35:56 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2024-12-11 20:35:56 [INFO] apscheduler.scheduler: Added job "send_eod_prompts" to job store "default"
+2024-12-11 20:35:56 [INFO] apscheduler.scheduler: Added job "send_reminders" to job store "default"
+2024-12-11 20:35:56 [INFO] apscheduler.scheduler: Added job "generate_weekly_summary" to job store "default"
+2024-12-11 20:35:56 [INFO] apscheduler.scheduler: Scheduler started
+2024-12-11 20:35:56 [INFO] app: Scheduler setup completed successfully
+2024-12-11 20:35:56 [INFO] app: Application initialization completed successfully
+2024-12-11 20:35:56 [INFO] app: Scheduler setup completed successfully
+2024-12-11 20:35:56 [INFO] app: Application initialization completed successfully
+2024-12-11 20:35:56 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2024-12-11 20:35:56 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2024-12-11 20:35:56 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2024-12-11 20:35:56 [INFO] apscheduler.scheduler: Added job "send_eod_prompts" to job store "default"
+2024-12-11 20:35:56 [INFO] apscheduler.scheduler: Added job "send_reminders" to job store "default"
+2024-12-11 20:35:56 [INFO] apscheduler.scheduler: Added job "generate_weekly_summary" to job store "default"
+2024-12-11 20:35:56 [INFO] apscheduler.scheduler: Scheduler started
+2024-12-11 20:35:56 [INFO] app: Scheduler setup completed successfully
+2024-12-11 20:35:56 [INFO] app: Application initialization completed successfully
