@@ -241,6 +241,10 @@ def slack_commands():
             logger.error(f"Error parsing timestamp: {str(e)}")
             return jsonify({'error': 'invalid_timestamp_format'}), 400
             
+        # Get the raw body for signature verification
+        raw_body = request.get_data().decode('utf-8')
+        logger.debug(f"Raw body for signature calculation: {raw_body}")
+            
         # Calculate signature
         sig_basestring = f"v0:{timestamp}:{raw_body}"
         logger.debug(f"Signature base string: {sig_basestring}")
@@ -329,7 +333,6 @@ def slack_commands():
             # Send EOD prompt
             try:
                 logger.info(f"Sending EOD prompt to user {user_id}")
-                slack_bot.send_eod_prompt(user_id)
                 # First send immediate response to Slack
                 immediate_response = {
                     'response_type': 'ephemeral',
@@ -340,7 +343,12 @@ def slack_commands():
                 response.headers['Content-Type'] = 'application/json'
                 
                 # Then send the DM asynchronously
-                slack_bot.send_eod_prompt(user_id)
+                try:
+                    slack_bot.send_eod_prompt(user_id)
+                except Exception as e:
+                    logger.error(f"Error sending DM: {str(e)}")
+                    # Even if DM fails, we need to respond to slash command
+                    pass
                 
                 return response, 200
             except Exception as e:
