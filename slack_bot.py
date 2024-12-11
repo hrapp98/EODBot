@@ -10,84 +10,144 @@ class SlackBot:
     def __init__(self):
         self.client = WebClient(token=Config.SLACK_BOT_OAUTH_TOKEN)
     
-    def send_eod_prompt(self, user_id):
-        """Send EOD report prompt to user"""
+    def send_eod_prompt(self, trigger_id):
+        """Open EOD report modal for user"""
         try:
-            logger.info(f"Attempting to send EOD prompt to user {user_id}")
-            # First verify if we can access the user's DM channel
-            try:
-                response = self.client.conversations_open(users=[user_id])
-                channel_id = response['channel']['id']
-            except SlackApiError as e:
-                logger.error(f"Error opening DM channel: {e.response['error']}")
-                return
-                
-            blocks = [
-                {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": "Time for your EOD report! Please provide the following information:"
-                    }
+            logger.info(f"Opening EOD modal with trigger_id: {trigger_id}")
+            
+            view = {
+                "type": "modal",
+                "callback_id": "eod_report_modal",
+                "title": {
+                    "type": "plain_text",
+                    "text": "EOD Report"
                 },
-                {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": "*Format your response as follows:*\n"
-                                "Short-term:\n[Your updates]\n"
-                                "Long-term:\n[Your updates]\n"
-                                "Accomplishments:\n[Your updates]\n"
-                                "Blockers:\n[Any blockers]\n"
-                                "Goals:\n[Tomorrow's goals]\n"
-                                "Client:\n[Any client interactions]"
-                    }
+                "submit": {
+                    "type": "plain_text",
+                    "text": "Submit"
                 },
-                {
-                    "type": "actions",
-                    "block_id": "skip_eod_block",
-                    "elements": [
-                        {
-                            "type": "button",
-                            "text": {
+                "close": {
+                    "type": "plain_text",
+                    "text": "Cancel"
+                },
+                "blocks": [
+                    {
+                        "type": "input",
+                        "block_id": "short_term_block",
+                        "label": {
+                            "type": "plain_text",
+                            "text": "Short-term Projects"
+                        },
+                        "element": {
+                            "type": "plain_text_input",
+                            "action_id": "short_term_input",
+                            "multiline": True,
+                            "placeholder": {
                                 "type": "plain_text",
-                                "text": "Skip Today",
-                                "emoji": true
-                            },
-                            "action_id": "skip_eod_action",
-                            "value": "skip_eod",
-                            "style": "danger",
-                            "confirm": {
-                                "title": {
-                                    "type": "plain_text",
-                                    "text": "Skip EOD Report"
-                                },
-                                "text": {
-                                    "type": "plain_text",
-                                    "text": "Are you sure you want to skip today's EOD report?"
-                                },
-                                "confirm": {
-                                    "type": "plain_text",
-                                    "text": "Yes, Skip Today"
-                                },
-                                "deny": {
-                                    "type": "plain_text",
-                                    "text": "No, Cancel"
-                                }
+                                "text": "What did you work on today?"
                             }
                         }
-                    ]
-                }
-            ]
+                    },
+                    {
+                        "type": "input",
+                        "block_id": "long_term_block",
+                        "label": {
+                            "type": "plain_text",
+                            "text": "Long-term Projects"
+                        },
+                        "element": {
+                            "type": "plain_text_input",
+                            "action_id": "long_term_input",
+                            "multiline": True,
+                            "placeholder": {
+                                "type": "plain_text",
+                                "text": "Any progress on long-term initiatives?"
+                            }
+                        },
+                        "optional": True
+                    },
+                    {
+                        "type": "input",
+                        "block_id": "accomplishments_block",
+                        "label": {
+                            "type": "plain_text",
+                            "text": "Key Accomplishments"
+                        },
+                        "element": {
+                            "type": "plain_text_input",
+                            "action_id": "accomplishments_input",
+                            "multiline": True,
+                            "placeholder": {
+                                "type": "plain_text",
+                                "text": "What did you accomplish today?"
+                            }
+                        }
+                    },
+                    {
+                        "type": "input",
+                        "block_id": "blockers_block",
+                        "label": {
+                            "type": "plain_text",
+                            "text": "Blockers/Challenges"
+                        },
+                        "element": {
+                            "type": "plain_text_input",
+                            "action_id": "blockers_input",
+                            "multiline": True,
+                            "placeholder": {
+                                "type": "plain_text",
+                                "text": "Any blockers or challenges?"
+                            }
+                        },
+                        "optional": True
+                    },
+                    {
+                        "type": "input",
+                        "block_id": "goals_block",
+                        "label": {
+                            "type": "plain_text",
+                            "text": "Tomorrow's Goals"
+                        },
+                        "element": {
+                            "type": "plain_text_input",
+                            "action_id": "goals_input",
+                            "multiline": True,
+                            "placeholder": {
+                                "type": "plain_text",
+                                "text": "What are your goals for tomorrow?"
+                            }
+                        }
+                    },
+                    {
+                        "type": "input",
+                        "block_id": "client_block",
+                        "label": {
+                            "type": "plain_text",
+                            "text": "Client Interactions"
+                        },
+                        "element": {
+                            "type": "plain_text_input",
+                            "action_id": "client_input",
+                            "multiline": True,
+                            "placeholder": {
+                                "type": "plain_text",
+                                "text": "Any client interactions today?"
+                            }
+                        },
+                        "optional": True
+                    }
+                ]
+            }
             
-            self.client.chat_postMessage(
-                channel=user_id,
-                blocks=blocks,
-                text="Time for your EOD report!"
+            # Open the modal
+            self.client.views_open(
+                trigger_id=trigger_id,
+                view=view
             )
+            logger.info("EOD modal opened successfully")
             
         except SlackApiError as e:
-            logger.error(f"Error sending message: {e.response['error']}")
+            logger.error(f"Error opening modal: {e.response['error']}")
     
     def send_reminder(self, user_id):
         """Send reminder for missing EOD report"""

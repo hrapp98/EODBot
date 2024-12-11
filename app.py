@@ -140,8 +140,12 @@ def handle_message(event):
         # Handle direct messages
         if channel_type == 'im':
             if text == 'eod report':
-                # Send EOD report prompt
-                slack_bot.send_eod_prompt(user_id)
+                # Open EOD report modal
+                trigger_id = event.get('trigger_id')
+                if trigger_id:
+                    slack_bot.send_eod_prompt(trigger_id)
+                else:
+                    slack_bot.send_message(user_id, "Please use the /eod command to submit your report.")
             elif text.startswith('submit eod:'):
                 # Handle EOD submission
                 handle_eod_submission(event)
@@ -242,13 +246,16 @@ def slack_commands():
         
         # Process command
         command = request.form.get('command')
-        user_id = request.form.get('user_id')
+        trigger_id = request.form.get('trigger_id')
         
         if command == '/eod':
-            slack_bot.send_eod_prompt(user_id)
+            if not trigger_id:
+                return jsonify({'error': 'missing_trigger'}), 400
+                
+            slack_bot.send_eod_prompt(trigger_id)
             return jsonify({
                 'response_type': 'ephemeral',
-                'text': 'Please provide your EOD report details...'
+                'text': 'Opening EOD report form...'
             })
             
         return jsonify({
@@ -304,7 +311,51 @@ def slack_interactivity():
             logger.error("Failed to parse payload JSON")
             return jsonify({'error': 'invalid_payload'}), 400
         
-        if payload.get('type') == 'block_actions':
+        # Handle different interaction types
+        interaction_type = payload.get('type')
+        
+        if interaction_type == 'view_submission':
+            # Handle modal submission
+            view = payload.get('view', {})
+            if view.get('callback_id') == 'eod_report_modal':
+                user_id = payload.get('user', {}).get('id')
+                if not user_id:
+                    logger.warning("Missing user_id in modal submission")
+                    return jsonify({'error': 'missing_user'}), 400
+                
+                # Extract values from blocks
+                state = view.get('state', {}).get('values', {})
+                report_data = {
+                    'short_term_projects': state.get('short_term_block', {}).get('short_term_input', {}).get('value', ''),
+                    'long_term_projects': state.get('long_term_block', {}).get('long_term_input', {}).get('value', ''),
+                    'accomplishments': state.get('accomplishments_block', {}).get('accomplishments_input', {}).get('value', ''),
+                    'blockers': state.get('blockers_block', {}).get('blockers_input', {}).get('value', ''),
+                    'next_day_goals': state.get('goals_block', {}).get('goals_input', {}).get('value', ''),
+                    'client_interactions': state.get('client_block', {}).get('client_input', {}).get('value', ''),
+                    'user_id': user_id,
+                    'created_at': datetime.utcnow().isoformat()
+                }
+                
+                # Save to Firebase
+                if firebase_client:
+                    try:
+                        firebase_client.save_eod_report(user_id, report_data)
+                        # Post to channel
+                        slack_bot.post_report_to_channel(report_data)
+                        # Send confirmation message
+                        slack_bot.send_message(user_id, "Thank you! Your EOD report has been submitted.")
+                    except Exception as e:
+                        logger.error(f"Error saving EOD report: {str(e)}")
+                        return jsonify({
+                            'response_action': 'errors',
+                            'errors': {
+                                'short_term_block': 'Failed to save report. Please try again.'
+                            }
+                        })
+                
+                return jsonify({'response_action': 'clear'})
+                
+        elif interaction_type == 'block_actions':
             # Handle button clicks
             for action in payload.get('actions', []):
                 if action.get('value') == 'skip_eod':
@@ -351,7 +402,6 @@ def slack_interactivity():
                         logger.info(f"Updated message for user {user_id}")
                     except Exception as e:
                         logger.error(f"Error updating message: {str(e)}")
-                        # Continue execution to at least acknowledge the interaction
                     
                     return jsonify({
                         'response_type': 'ephemeral',
