@@ -209,6 +209,9 @@ def slack_commands():
         logger.info("Received Slack command request")
         logger.debug(f"Headers: {dict(request.headers)}")
         logger.debug(f"Form data: {dict(request.form)}")
+        logger.debug(f"Request method: {request.method}")
+        logger.debug(f"Content type: {request.content_type}")
+        logger.debug(f"Content length: {request.content_length}")
         
         # Get the raw body for signature verification
         raw_body = request.get_data(as_text=True)
