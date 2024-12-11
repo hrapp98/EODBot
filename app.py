@@ -353,7 +353,21 @@ def slack_interactivity():
                             }
                         })
                 
-                return jsonify({'response_action': 'clear'})
+                # Send confirmation message to user
+                try:
+                    slack_bot.send_message(
+                        user_id,
+                        ":white_check_mark: Your EOD report has been submitted successfully! Thank you for your update."
+                    )
+                    return jsonify({'response_action': 'clear'})
+                except Exception as e:
+                    logger.error(f"Error sending confirmation message: {str(e)}")
+                    return jsonify({
+                        'response_action': 'errors',
+                        'errors': {
+                            'short_term_block': 'Failed to send confirmation. Please check if the report was submitted.'
+                        }
+                    })
                 
         elif interaction_type == 'block_actions':
             # Handle button clicks

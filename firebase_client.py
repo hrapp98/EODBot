@@ -78,16 +78,17 @@ class FirebaseClient:
         """Save EOD report to Firebase"""
         if not self.db:
             logger.error("Firebase client not initialized")
-            return None
+            raise RuntimeError("Firebase client not initialized")
             
         try:
             report_data['timestamp'] = datetime.now()
             doc_ref = self.db.collection('eod_reports').document()
             doc_ref.set(report_data)
+            logger.info(f"Successfully saved EOD report for user {user_id}")
             return doc_ref.id
         except Exception as e:
             logger.error(f"Error saving EOD report: {str(e)}")
-            return None
+            raise
 
     def get_user_reports(self, user_id, date=None):
         """Get EOD reports for a specific user"""
