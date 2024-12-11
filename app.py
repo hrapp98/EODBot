@@ -264,6 +264,50 @@ def slack_commands():
         except Exception as e:
             logger.error(f"Error calculating signature: {str(e)}")
             return jsonify({'error': 'signature_calculation_failed'}), 500
+        
+        logger.debug(f"Verifying Slack request - Timestamp: {timestamp}, Signature: {signature}")
+        
+        if not timestamp or not signature:
+            logger.error("Missing required Slack headers")
+            return jsonify({'error': 'missing_headers'}), 400
+            
+        # Verify timestamp
+        try:
+            current_ts = datetime.now().timestamp()
+            timestamp_age = abs(current_ts - float(timestamp))
+            logger.debug(f"Current timestamp: {current_ts}")
+            logger.debug(f"Request timestamp age: {timestamp_age} seconds")
+            
+            if timestamp_age > 60 * 5:
+                logger.warning(f"Request timestamp too old: {timestamp_age} seconds")
+                return jsonify({'error': 'invalid_timestamp'}), 403
+        except ValueError as e:
+            logger.error(f"Error parsing timestamp: {str(e)}")
+            return jsonify({'error': 'invalid_timestamp_format'}), 400
+            
+        # Calculate signature
+        sig_basestring = f"v0:{timestamp}:{raw_body}"
+        logger.debug(f"Signature base string: {sig_basestring}")
+        
+        try:
+            my_signature = 'v0=' + hmac.new(
+                Config.SLACK_SIGNING_SECRET.encode(),
+                sig_basestring.encode(),
+                hashlib.sha256
+            ).hexdigest()
+            
+            logger.debug(f"Calculated signature: {my_signature}")
+            logger.debug(f"Received signature: {signature}")
+            
+            if not hmac.compare_digest(my_signature, signature):
+                logger.warning("Signature verification failed")
+                return jsonify({'error': 'invalid_signature'}), 403
+                
+            logger.info("Signature verification successful")
+                
+        except Exception as e:
+            logger.error(f"Error calculating signature: {str(e)}")
+            return jsonify({'error': 'signature_calculation_failed'}), 500
 
         # Parse form data
         if not request.form:
