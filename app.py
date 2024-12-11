@@ -337,35 +337,51 @@ def slack_interactivity():
                 }
                 
                 # Save to Firebase
-                if firebase_client:
-                    try:
-                        firebase_client.save_eod_report(user_id, report_data)
-                        # Post to channel
-                        slack_bot.post_report_to_channel(report_data)
-                        # Send confirmation message
-                        slack_bot.send_message(user_id, "Thank you! Your EOD report has been submitted.")
-                    except Exception as e:
-                        logger.error(f"Error saving EOD report: {str(e)}")
-                        return jsonify({
-                            'response_action': 'errors',
-                            'errors': {
-                                'short_term_block': 'Failed to save report. Please try again.'
-                            }
-                        })
-                
-                # Send confirmation message to user
-                try:
-                    slack_bot.send_message(
-                        user_id,
-                        ":white_check_mark: Your EOD report has been submitted successfully! Thank you for your update."
-                    )
-                    return jsonify({'response_action': 'clear'})
-                except Exception as e:
-                    logger.error(f"Error sending confirmation message: {str(e)}")
+                if not firebase_client:
+                    logger.error("Firebase client not available")
                     return jsonify({
                         'response_action': 'errors',
                         'errors': {
-                            'short_term_block': 'Failed to send confirmation. Please check if the report was submitted.'
+                            'short_term_block': 'Service unavailable. Please try again later.'
+                        }
+                    })
+
+                try:
+                    # Save report to Firebase
+                    report_id = firebase_client.save_eod_report(user_id, report_data)
+                    logger.info(f"Saved EOD report with ID: {report_id}")
+                    
+                    # Post to channel
+                    slack_bot.post_report_to_channel(report_data)
+                    logger.info("Posted report to channel")
+                    
+                    # Clear the modal first
+                    logger.info("Clearing modal view")
+                    response = {'response_action': 'clear'}
+                    
+                    # Schedule confirmation message
+                    def send_delayed_confirmation():
+                        try:
+                            slack_bot.send_message(
+                                user_id,
+                                ":white_check_mark: Your EOD report has been submitted successfully! Thank you for your update."
+                            )
+                            logger.info(f"Sent confirmation message to user {user_id}")
+                        except Exception as e:
+                            logger.error(f"Failed to send confirmation message: {str(e)}")
+                    
+                    # Use a background thread to send the confirmation
+                    from threading import Thread
+                    Thread(target=send_delayed_confirmation).start()
+                    
+                    return jsonify(response)
+                    
+                except Exception as e:
+                    logger.error(f"Error processing EOD submission: {str(e)}")
+                    return jsonify({
+                        'response_action': 'errors',
+                        'errors': {
+                            'short_term_block': 'Failed to save report. Please try again.'
                         }
                     })
                 
