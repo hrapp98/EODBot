@@ -66,23 +66,7 @@ class SlackBot:
                         },
                         "optional": True
                     },
-                    {
-                        "type": "input",
-                        "block_id": "accomplishments_block",
-                        "label": {
-                            "type": "plain_text",
-                            "text": "Key Accomplishments"
-                        },
-                        "element": {
-                            "type": "plain_text_input",
-                            "action_id": "accomplishments_input",
-                            "multiline": True,
-                            "placeholder": {
-                                "type": "plain_text",
-                                "text": "What did you accomplish today?"
-                            }
-                        }
-                    },
+                    
                     {
                         "type": "input",
                         "block_id": "blockers_block",
@@ -96,7 +80,7 @@ class SlackBot:
                             "multiline": True,
                             "placeholder": {
                                 "type": "plain_text",
-                                "text": "Any blockers or challenges?"
+                                "text": "Any blockers or challenges that you experienced?"
                             }
                         },
                         "optional": True
@@ -120,21 +104,37 @@ class SlackBot:
                     },
                     {
                         "type": "input",
-                        "block_id": "client_block",
+                        "block_id": "tools_block",
                         "label": {
                             "type": "plain_text",
-                            "text": "Client Interactions"
+                            "text": "Software Tools Used Today"
                         },
                         "element": {
                             "type": "plain_text_input",
-                            "action_id": "client_input",
+                            "action_id": "tools_input",
                             "multiline": True,
                             "placeholder": {
                                 "type": "plain_text",
-                                "text": "Any client interactions today?"
+                                "text": "What software tools did you use today?"
                             }
+                        }
+                    },
+                    {
+                        "type": "input",
+                        "block_id": "help_block",
+                        "label": {
+                            "type": "plain_text",
+                            "text": "Need Help?"
                         },
-                        "optional": True
+                        "element": {
+                            "type": "plain_text_input",
+                            "action_id": "help_input",
+                            "multiline": True,
+                            "placeholder": {
+                                "type": "plain_text",
+                                "text": "Is there anything we can help you with?"
+                            }
+                        }
                     }
                 ]
             }

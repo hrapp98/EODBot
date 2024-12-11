@@ -328,10 +328,10 @@ def slack_interactivity():
                 report_data = {
                     'short_term_projects': state.get('short_term_block', {}).get('short_term_input', {}).get('value', ''),
                     'long_term_projects': state.get('long_term_block', {}).get('long_term_input', {}).get('value', ''),
-                    'accomplishments': state.get('accomplishments_block', {}).get('accomplishments_input', {}).get('value', ''),
                     'blockers': state.get('blockers_block', {}).get('blockers_input', {}).get('value', ''),
                     'next_day_goals': state.get('goals_block', {}).get('goals_input', {}).get('value', ''),
-                    'client_interactions': state.get('client_block', {}).get('client_input', {}).get('value', ''),
+                    'tools_used': state.get('tools_block', {}).get('tools_input', {}).get('value', ''),
+                    'help_needed': state.get('help_block', {}).get('help_input', {}).get('value', ''),
                     'user_id': user_id,
                     'created_at': datetime.utcnow().isoformat()
                 }
