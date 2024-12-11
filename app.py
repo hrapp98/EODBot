@@ -480,19 +480,46 @@ def dashboard():
         return "Error loading dashboard. Please check server logs.", 500
 
 
-if __name__ == '__main__':
-    with app.app_context():
-        try:
-            logger.info("Setting up scheduler...")
+def init_app():
+    """Initialize the application with all required setup"""
+    logger.info("Starting application initialization...")
+    try:
+        # First verify all required environment variables
+        logger.info("Checking environment configuration...")
+        required_vars = ['SLACK_BOT_TOKEN', 'SLACK_SIGNING_SECRET', 'OPENAI_API_KEY']
+        missing_vars = [var for var in required_vars if not os.environ.get(var)]
+        if missing_vars:
+            logger.error(f"Missing required environment variables: {missing_vars}")
+            return False
+
+        with app.app_context():
+            logger.info("Setting up scheduler in application context...")
             from scheduler import setup_scheduler
             setup_scheduler(app)
-            logger.info("Scheduler setup complete")
+            logger.info("Scheduler setup completed successfully")
             
-            # Get port from environment variable or default to 5000
-            port = int(os.environ.get('PORT', 5000))
-            
-            logger.info(f"Starting Flask server on port {port}...")
-            app.run(host='0.0.0.0', port=port, debug=False)
-        except Exception as e:
-            logger.error(f"Failed to start application: {str(e)}")
-            raise
+        logger.info("Application initialization completed successfully")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to initialize application: {str(e)}", exc_info=True)
+        import traceback
+        logger.error(f"Full stack trace: {traceback.format_exc()}")
+        return False
+
+# Configure for production
+app.config['ENV'] = 'production'
+app.config['DEBUG'] = False
+app.config['TESTING'] = False
+
+# Initialize app if running directly
+if __name__ == '__main__':
+    if not init_app():
+        logger.critical("Application failed to initialize. Exiting.")
+        exit(1)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
+else:
+    # Initialize when imported by gunicorn
+    if not init_app():
+        logger.critical("Application failed to initialize. Exiting.")
+        exit(1)
