@@ -194,6 +194,55 @@ def handle_eod_submission(event):
         slack_bot.send_error_message(event.get('user'))
 
 @app.route('/dashboard')
+@app.route('/slack/commands', methods=['POST'])
+def slack_commands():
+    """Handle Slack slash commands"""
+    try:
+        # Verify request signature
+        timestamp = request.headers.get('X-Slack-Request-Timestamp', '')
+        signature = request.headers.get('X-Slack-Signature', '')
+        
+        if not timestamp or not signature:
+            logger.warning("Missing Slack verification headers")
+            return jsonify({'error': 'missing_headers'}), 400
+            
+        if abs(datetime.now().timestamp() - float(timestamp)) > 60 * 5:
+            logger.warning("Request timestamp too old")
+            return jsonify({'error': 'invalid_timestamp'}), 403
+            
+        sig_basestring = f"v0:{timestamp}:{request.get_data(as_text=True)}"
+        my_signature = 'v0=' + hmac.new(
+            Config.SLACK_SIGNING_SECRET.encode(),
+            sig_basestring.encode(),
+            hashlib.sha256
+        ).hexdigest()
+        
+        if not hmac.compare_digest(my_signature, signature):
+            logger.warning("Invalid request signature")
+            return jsonify({'error': 'invalid_signature'}), 403
+        
+        # Process command
+        command = request.form.get('command')
+        user_id = request.form.get('user_id')
+        
+        if command == '/eod':
+            slack_bot.send_eod_prompt(user_id)
+            return jsonify({
+                'response_type': 'ephemeral',
+                'text': 'Please provide your EOD report details...'
+            })
+            
+        return jsonify({
+            'response_type': 'ephemeral',
+            'text': 'Unknown command'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error handling slash command: {str(e)}")
+        return jsonify({
+            'response_type': 'ephemeral',
+            'text': 'Sorry, something went wrong processing your command.'
+        }), 500
 def dashboard():
     """Render submission status dashboard"""
     try:
