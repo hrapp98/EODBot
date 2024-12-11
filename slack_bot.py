@@ -251,7 +251,7 @@ class SlackBot:
                     "type": "plain_text_input",
                     "action_id": "short_term_input",
                     "multiline": True,
-                    "initial_value": existing_data.get('short_term_projects', '') if existing_data else None,
+                    "initial_value": existing_data.get('short_term_projects', '') if existing_data else '',
                     "placeholder": {"type": "plain_text", "text": "What did you work on today?"}
                 }
             },

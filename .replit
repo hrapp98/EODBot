@@ -27,11 +27,11 @@ task = "packager.installForAll"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "gunicorn app:app --bind 0.0.0.0:5000 --workers 1 --threads 2 --worker-class gthread --worker-connections 50 --timeout 120 --keep-alive 5 --log-level debug --preload --graceful-timeout 30"
+args = "python app.py"
 waitForPort = 5000
 
 [deployment]
-run = ["sh", "-c", "gunicorn app:app --bind 0.0.0.0:3000 --workers 1 --threads 2 --worker-class gthread --worker-connections 50 --timeout 120 --keep-alive 5"]
+run = ["sh", "-c", "PORT=3000 python app.py"]
 
 [[ports]]
 localPort = 3000
