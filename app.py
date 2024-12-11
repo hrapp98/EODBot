@@ -193,6 +193,61 @@ def handle_eod_submission(event):
         logger.error(f"Error processing submission: {str(e)}")
         slack_bot.send_error_message(event.get('user'))
 
+@app.route('/slack/commands', methods=['POST'])
+def slack_commands():
+    """Handle Slack slash commands"""
+    try:
+        # Verify request signature
+        timestamp = request.headers.get('X-Slack-Request-Timestamp', '')
+        signature = request.headers.get('X-Slack-Signature', '')
+        
+        if abs(datetime.now().timestamp() - float(timestamp)) > 60 * 5:
+            logger.warning("Request timestamp too old")
+            return jsonify({'error': 'invalid_timestamp'}), 403
+            
+        # Get raw body for signature verification
+        raw_body = request.get_data(as_text=True)
+        sig_basestring = f"v0:{timestamp}:{raw_body}"
+        my_signature = 'v0=' + hmac.new(
+            Config.SLACK_SIGNING_SECRET.encode(),
+            sig_basestring.encode(),
+            hashlib.sha256
+        ).hexdigest()
+        
+        if not hmac.compare_digest(my_signature, signature):
+            logger.warning("Invalid request signature")
+            return jsonify({'error': 'invalid_signature'}), 403
+
+        # Parse form data
+        if not request.form:
+            logger.warning("No form data in slash command request")
+            return jsonify({'error': 'missing_data'}), 400
+            
+        command = request.form.get('command', '')
+        user_id = request.form.get('user_id', '')
+        
+        logger.debug(f"Received slash command: {command} from user: {user_id}")
+        
+        if command == '/eod':
+            # Send EOD prompt
+            slack_bot.send_eod_prompt(user_id)
+            return jsonify({
+                'response_type': 'ephemeral',
+                'text': 'Please check your DM for the EOD report prompt!'
+            })
+            
+        return jsonify({
+            'response_type': 'ephemeral',
+            'text': 'Unknown command'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error handling slash command: {str(e)}")
+        return jsonify({
+            'response_type': 'ephemeral',
+            'text': 'Sorry, there was an error processing your command.'
+        }), 500
+
 @app.route('/dashboard')
 def dashboard():
     """Render submission status dashboard"""
