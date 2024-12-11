@@ -502,22 +502,14 @@ if __name__ == '__main__':
                 raise ValueError("SLACK_BOT_TOKEN must be configured")
             
             # Start the server
+            port = 80 if os.environ.get('REPL_ID') else 3000
             logger.info(f"Starting Flask server on port {port}...")
-            # Try alternative port if 3000 is busy
-            ports = [3000, 3001, 3002, 3003]
-            for port_num in ports:
-                try:
-                    app.run(
-                        host='0.0.0.0',  # Allow external access
-                        port=port_num,
-                        debug=False,
-                        use_reloader=False
-                    )
-                    break
-                except OSError:
-                    if port_num == ports[-1]:
-                        raise
-                    continue
+            app.run(
+                host='0.0.0.0',  # Allow external access
+                port=port,
+                debug=False,
+                use_reloader=False
+            )
         except Exception as e:
             logger.error(f"Failed to start application: {str(e)}")
             raise
