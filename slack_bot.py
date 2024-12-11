@@ -13,6 +13,15 @@ class SlackBot:
     def send_eod_prompt(self, user_id):
         """Send EOD report prompt to user"""
         try:
+            logger.info(f"Attempting to send EOD prompt to user {user_id}")
+            # First verify if we can access the user's DM channel
+            try:
+                response = self.client.conversations_open(users=[user_id])
+                channel_id = response['channel']['id']
+            except SlackApiError as e:
+                logger.error(f"Error opening DM channel: {e.response['error']}")
+                return
+                
             blocks = [
                 {
                     "type": "section",
