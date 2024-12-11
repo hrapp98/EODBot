@@ -68,12 +68,14 @@ class SlackBot:
                 }
             ]
             
+            logger.debug(f"Attempting to send message to Slack API - Channel: {user_id}")
             response = self.client.chat_postMessage(
                 channel=user_id,
                 blocks=blocks,
                 text="Time for your EOD report!"
             )
-            logger.debug(f"EOD prompt sent successfully to {user_id}")
+            logger.debug(f"Slack API Response: {response}")
+            logger.info(f"EOD prompt sent successfully to {user_id}")
             
         except SlackApiError as e:
             logger.error(f"Error sending message: {e.response['error']}")

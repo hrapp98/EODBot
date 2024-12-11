@@ -272,16 +272,33 @@ def slack_commands():
             
         command = request.form.get('command', '')
         user_id = request.form.get('user_id', '')
+        text = request.form.get('text', '')
+        channel_id = request.form.get('channel_id', '')
         
-        logger.debug(f"Received slash command: {command} from user: {user_id}")
+        logger.debug(f"Command details:")
+        logger.debug(f"- Command: {command}")
+        logger.debug(f"- User ID: {user_id}")
+        logger.debug(f"- Text: {text}")
+        logger.debug(f"- Channel ID: {channel_id}")
         
         if command == '/eod':
             # Send EOD prompt
-            slack_bot.send_eod_prompt(user_id)
-            return jsonify({
-                'response_type': 'ephemeral',
-                'text': 'Please check your DM for the EOD report prompt!'
-            })
+            try:
+                logger.info(f"Sending EOD prompt to user {user_id}")
+                slack_bot.send_eod_prompt(user_id)
+                response = {
+                    'response_type': 'ephemeral',
+                    'text': 'Please check your DM for the EOD report prompt!'
+                }
+                logger.debug(f"Sending response to Slack: {response}")
+                return jsonify(response)
+            except Exception as e:
+                logger.error(f"Error sending EOD prompt: {str(e)}")
+                error_response = {
+                    'response_type': 'ephemeral',
+                    'text': 'Sorry, there was an error processing your command.'
+                }
+                return jsonify(error_response), 500
             
         return jsonify({
             'response_type': 'ephemeral',
