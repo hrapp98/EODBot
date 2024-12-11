@@ -13,43 +13,26 @@ class SlackBot:
     def send_eod_prompt(self, user_id):
         """Send EOD report prompt to user"""
         try:
-            logger.debug(f"Sending EOD prompt to user {user_id}")
             blocks = [
                 {
-                    "type": "header",
+                    "type": "section",
                     "text": {
-                        "type": "plain_text",
-                        "text": "📝 End of Day Report"
+                        "type": "mrkdwn",
+                        "text": "Time for your EOD report! Please provide the following information:"
                     }
                 },
                 {
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": "Please provide your EOD report with the following information:"
+                        "text": "*Format your response as follows:*\n"
+                                "Short-term:\n[Your updates]\n"
+                                "Long-term:\n[Your updates]\n"
+                                "Accomplishments:\n[Your updates]\n"
+                                "Blockers:\n[Any blockers]\n"
+                                "Goals:\n[Tomorrow's goals]\n"
+                                "Client:\n[Any client interactions]"
                     }
-                },
-                {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": "*Format your response as follows:*\n\n"
-                                ">*Short-term:*\n>[Project updates & progress]\n\n"
-                                ">*Long-term:*\n>[Strategic project updates]\n\n"
-                                ">*Accomplishments:*\n>[Key wins today]\n\n"
-                                ">*Blockers:*\n>[Any challenges]\n\n"
-                                ">*Goals:*\n>[Tomorrow's priorities]\n\n"
-                                ">*Client:*\n>[Important interactions]"
-                    }
-                },
-                {
-                    "type": "context",
-                    "elements": [
-                        {
-                            "type": "mrkdwn",
-                            "text": "💡 *Tip:* Copy the template above and replace the bracketed text with your updates"
-                        }
-                    ]
                 },
                 {
                     "type": "actions",
@@ -61,21 +44,17 @@ class SlackBot:
                                 "text": "Skip Today"
                             },
                             "style": "danger",
-                            "value": "skip_eod",
-                            "action_id": "skip_eod"
+                            "value": "skip_eod"
                         }
                     ]
                 }
             ]
             
-            logger.debug(f"Attempting to send message to Slack API - Channel: {user_id}")
-            response = self.client.chat_postMessage(
+            self.client.chat_postMessage(
                 channel=user_id,
                 blocks=blocks,
                 text="Time for your EOD report!"
             )
-            logger.debug(f"Slack API Response: {response}")
-            logger.info(f"EOD prompt sent successfully to {user_id}")
             
         except SlackApiError as e:
             logger.error(f"Error sending message: {e.response['error']}")

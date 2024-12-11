@@ -1,22 +1,13 @@
+from flask import Flask, request, jsonify, render_template
+import logging
+import os
+from datetime import datetime
 import hmac
 import hashlib
-import json
-import os
-from datetime import datetime, timedelta
-from flask import Flask, request, jsonify, render_template
 from slack_bot import SlackBot
 from firebase_client import FirebaseClient
 from config import Config
 from models import EODReport, SubmissionTracker
-import logging
-
-# Setup logging with more detailed formatting
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-logger = logging.getLogger(__name__)
 
 # Set up logging with more detailed formatting
 logging.basicConfig(
@@ -201,175 +192,6 @@ def handle_eod_submission(event):
     except Exception as e:
         logger.error(f"Error processing submission: {str(e)}")
         slack_bot.send_error_message(event.get('user'))
-
-@app.route('/slack/commands', methods=['POST'])
-def slack_commands():
-    """Handle Slack slash commands"""
-    try:
-        logger.info("Received Slack command request")
-        logger.debug(f"Headers: {dict(request.headers)}")
-        logger.debug(f"Form data: {dict(request.form)}")
-        logger.debug(f"Request method: {request.method}")
-        logger.debug(f"Content type: {request.content_type}")
-        logger.debug(f"Content length: {request.content_length}")
-        
-        # Get the raw body for signature verification
-        raw_body = request.get_data(as_text=True)
-        logger.debug(f"Raw request body: {raw_body}")
-        
-        # Verify request signature
-        timestamp = request.headers.get('X-Slack-Request-Timestamp', '')
-        signature = request.headers.get('X-Slack-Signature', '')
-        
-        logger.debug(f"Verifying Slack request - Timestamp: {timestamp}, Signature: {signature}")
-        
-        if not timestamp or not signature:
-            logger.error("Missing required Slack headers")
-            return jsonify({'error': 'missing_headers'}), 400
-            
-        # Verify timestamp
-        try:
-            current_ts = datetime.now().timestamp()
-            timestamp_age = abs(current_ts - float(timestamp))
-            logger.debug(f"Current timestamp: {current_ts}")
-            logger.debug(f"Request timestamp age: {timestamp_age} seconds")
-            
-            if timestamp_age > 60 * 5:
-                logger.warning(f"Request timestamp too old: {timestamp_age} seconds")
-                return jsonify({'error': 'invalid_timestamp'}), 403
-        except ValueError as e:
-            logger.error(f"Error parsing timestamp: {str(e)}")
-            return jsonify({'error': 'invalid_timestamp_format'}), 400
-            
-        # Get the raw body for signature verification
-        raw_body = request.get_data().decode('utf-8')
-        logger.debug(f"Raw body for signature calculation: {raw_body}")
-            
-        # Calculate signature
-        sig_basestring = f"v0:{timestamp}:{raw_body}"
-        logger.debug(f"Signature base string: {sig_basestring}")
-        
-        try:
-            my_signature = 'v0=' + hmac.new(
-                Config.SLACK_SIGNING_SECRET.encode(),
-                sig_basestring.encode(),
-                hashlib.sha256
-            ).hexdigest()
-            
-            logger.debug(f"Calculated signature: {my_signature}")
-            logger.debug(f"Received signature: {signature}")
-            
-            if not hmac.compare_digest(my_signature, signature):
-                logger.warning("Signature verification failed")
-                return jsonify({'error': 'invalid_signature'}), 403
-                
-            logger.info("Signature verification successful")
-                
-        except Exception as e:
-            logger.error(f"Error calculating signature: {str(e)}")
-            return jsonify({'error': 'signature_calculation_failed'}), 500
-        
-        logger.debug(f"Verifying Slack request - Timestamp: {timestamp}, Signature: {signature}")
-        
-        if not timestamp or not signature:
-            logger.error("Missing required Slack headers")
-            return jsonify({'error': 'missing_headers'}), 400
-            
-        # Verify timestamp
-        try:
-            current_ts = datetime.now().timestamp()
-            timestamp_age = abs(current_ts - float(timestamp))
-            logger.debug(f"Current timestamp: {current_ts}")
-            logger.debug(f"Request timestamp age: {timestamp_age} seconds")
-            
-            if timestamp_age > 60 * 5:
-                logger.warning(f"Request timestamp too old: {timestamp_age} seconds")
-                return jsonify({'error': 'invalid_timestamp'}), 403
-        except ValueError as e:
-            logger.error(f"Error parsing timestamp: {str(e)}")
-            return jsonify({'error': 'invalid_timestamp_format'}), 400
-            
-        # Calculate signature
-        sig_basestring = f"v0:{timestamp}:{raw_body}"
-        logger.debug(f"Signature base string: {sig_basestring}")
-        
-        try:
-            my_signature = 'v0=' + hmac.new(
-                Config.SLACK_SIGNING_SECRET.encode(),
-                sig_basestring.encode(),
-                hashlib.sha256
-            ).hexdigest()
-            
-            logger.debug(f"Calculated signature: {my_signature}")
-            logger.debug(f"Received signature: {signature}")
-            
-            if not hmac.compare_digest(my_signature, signature):
-                logger.warning("Signature verification failed")
-                return jsonify({'error': 'invalid_signature'}), 403
-                
-            logger.info("Signature verification successful")
-                
-        except Exception as e:
-            logger.error(f"Error calculating signature: {str(e)}")
-            return jsonify({'error': 'signature_calculation_failed'}), 500
-
-        # Parse form data
-        if not request.form:
-            logger.warning("No form data in slash command request")
-            return jsonify({'error': 'missing_data'}), 400
-            
-        command = request.form.get('command', '')
-        user_id = request.form.get('user_id', '')
-        text = request.form.get('text', '')
-        channel_id = request.form.get('channel_id', '')
-        
-        logger.debug(f"Command details:")
-        logger.debug(f"- Command: {command}")
-        logger.debug(f"- User ID: {user_id}")
-        logger.debug(f"- Text: {text}")
-        logger.debug(f"- Channel ID: {channel_id}")
-        
-        if command == '/eod':
-            # Send EOD prompt
-            try:
-                logger.info(f"Sending EOD prompt to user {user_id}")
-                # First send immediate response to Slack
-                immediate_response = {
-                    'response_type': 'ephemeral',
-                    'text': 'Processing your request...'
-                }
-                logger.debug(f"Sending immediate response to Slack: {immediate_response}")
-                response = jsonify(immediate_response)
-                response.headers['Content-Type'] = 'application/json'
-                
-                # Then send the DM asynchronously
-                try:
-                    slack_bot.send_eod_prompt(user_id)
-                except Exception as e:
-                    logger.error(f"Error sending DM: {str(e)}")
-                    # Even if DM fails, we need to respond to slash command
-                    pass
-                
-                return response, 200
-            except Exception as e:
-                logger.error(f"Error sending EOD prompt: {str(e)}")
-                error_response = {
-                    'response_type': 'ephemeral',
-                    'text': 'Sorry, there was an error processing your command.'
-                }
-                return jsonify(error_response), 500
-            
-        return jsonify({
-            'response_type': 'ephemeral',
-            'text': 'Unknown command'
-        })
-        
-    except Exception as e:
-        logger.error(f"Error handling slash command: {str(e)}")
-        return jsonify({
-            'response_type': 'ephemeral',
-            'text': 'Sorry, there was an error processing your command.'
-        }), 500
 
 @app.route('/dashboard')
 def dashboard():
