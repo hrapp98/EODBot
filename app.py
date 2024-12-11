@@ -1,5 +1,7 @@
 from flask import Flask, request, jsonify, render_template
 from datetime import datetime
+import signal
+from flask_cors import CORS
 import hmac
 import hashlib
 import logging
@@ -27,59 +29,73 @@ logging.getLogger('googleapiclient.discovery').setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
-# Load environment variables
-if os.path.exists('.env'):
-    from dotenv import load_dotenv
-    load_dotenv()
-    logger.info("Loaded .env file")
-
-# For Replit secrets
-if os.environ.get('REPL_ID'):
-    try:
-        secrets_path = os.path.join(os.environ.get('REPL_HOME', ''), '.config',
-                                    'secrets.json')
-        if os.path.exists(secrets_path):
-            with open(secrets_path) as f:
-                secrets = json.load(f)
-                for key, value in secrets.items():
-                    os.environ[key] = value
-            logger.info("Loaded Replit secrets successfully")
-        else:
-            logger.warning(f"Secrets file not found at {secrets_path}")
-    except Exception as e:
-        logger.error(f"Error loading Replit secrets: {str(e)}")
-
-# Verify OpenAI key is loaded
-logger.info(f"OpenAI API key loaded: {bool(os.environ.get('OPENAI_API_KEY'))}")
-
-
 def create_app():
     """Initialize and configure Flask application"""
     try:
+        # Set up signal handlers first (before any I/O)
+        signal.signal(signal.SIGWINCH, signal.SIG_IGN)
+        
         logger.info("Creating Flask application...")
         app = Flask(__name__)
-        app.secret_key = Config.FLASK_SECRET_KEY
+        
+        # Configure for production immediately after creation
+        app.config.update(
+            ENV='production',
+            DEBUG=False,
+            TESTING=False,
+            PROPAGATE_EXCEPTIONS=True,
+            MAX_CONTENT_LENGTH=16 * 1024 * 1024,  # 16MB max-limit
+        )
+        
+        # Load environment variables
+        if os.path.exists('.env'):
+            from dotenv import load_dotenv
+            load_dotenv()
+            logger.info("Loaded .env file")
 
+        # For Replit secrets
+        if os.environ.get('REPL_ID'):
+            try:
+                secrets_path = os.path.join(os.environ.get('REPL_HOME', ''), '.config',
+                                        'secrets.json')
+                if os.path.exists(secrets_path):
+                    with open(secrets_path) as f:
+                        secrets = json.load(f)
+                        for key, value in secrets.items():
+                            os.environ[key] = value
+                    logger.info("Loaded Replit secrets successfully")
+                else:
+                    logger.warning(f"Secrets file not found at {secrets_path}")
+            except Exception as e:
+                logger.error(f"Error loading Replit secrets: {str(e)}")
+        
+        app.secret_key = Config.FLASK_SECRET_KEY
+        
+        # Initialize CORS after configuration
+        CORS(app)
+        
         # Set up logging middleware
         @app.before_request
         def before_request_logging():
-            logger.debug(
-                f"Incoming {request.method} request to {request.path}")
+            logger.debug(f"Incoming {request.method} request to {request.path}")
             if request.is_json:
                 logger.debug(f"Request payload: {request.json}")
 
         @app.after_request
         def after_request_logging(response):
-            logger.debug(
-                f"Request completed with status {response.status_code}")
+            logger.debug(f"Request completed with status {response.status_code}")
             return response
 
+        # Add health check endpoint
+        @app.route('/health')
+        def health_check():
+            return jsonify({'status': 'healthy'}), 200
+            
         logger.info("Application creation successful")
         return app
     except Exception as e:
         logger.error(f"Failed to create application: {str(e)}")
         raise
-
 
 app = create_app()
 
@@ -94,13 +110,9 @@ if Config.firebase_config_valid():
         logger.info("Starting Firebase client initialization...")
         firebase_client = FirebaseClient()
         if firebase_client.db is None:
-            logger.warning(
-                "Firebase client not properly initialized - Firestore client is None"
-            )
+            logger.warning("Firebase client not properly initialized - Firestore client is None")
         else:
-            logger.info(
-                "Firebase client initialized successfully with Firestore access"
-            )
+            logger.info("Firebase client initialized successfully with Firestore access")
     except Exception as e:
         logger.error(f"Failed to initialize Firebase client: {str(e)}")
         firebase_client = None
@@ -573,17 +585,27 @@ def init_app():
         return False
 
 
-# Configure for production
-app.config['ENV'] = 'production'
-app.config['DEBUG'] = False
-app.config['TESTING'] = False
+# Configure for production with proper error handling
+
+# Error handlers
+@app.errorhandler(500)
+def handle_500_error(error):
+    logger.error(f"Internal server error: {error}")
+    return jsonify({'error': 'Internal server error'}), 500
+
+@app.errorhandler(404)
+def handle_404_error(error):
+    logger.warning(f"Page not found: {error}")
+    return jsonify({'error': 'Resource not found'}), 404
 
 # Initialize app if running directly
 if __name__ == '__main__':
-    if not init_app():
-        logger.critical("Application failed to initialize. Exiting.")
-        exit(1)
-    port = int(os.environ.get('PORT', 3000))
-    app.run(host='0.0.0.0', port=port, debug=True)
-        logger.critical("Application failed to initialize. Exiting.")
+    try:
+        if not init_app():
+            logger.critical("Application failed to initialize. Exiting.")
+            exit(1)
+        port = int(os.environ.get('PORT', 5000))
+        app.run(host='0.0.0.0', port=port, threaded=True)
+    except Exception as e:
+        logger.critical(f"Fatal error during startup: {str(e)}", exc_info=True)
         exit(1)
