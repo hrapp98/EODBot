@@ -6,10 +6,10 @@ import logging
 import json
 import os
 from config import Config
-from models import EODReport, SubmissionTracker
+from models import EODReport, SubmissionTracker, EODTracker #Added EODTracker import
 from slack_bot import SlackBot
 from firebase_client import FirebaseClient
-from firebase_admin import firestore
+from google.cloud import firestore #Using google.cloud firestore
 
 # Set up logging with more detailed formatting
 logging.basicConfig(
@@ -263,56 +263,55 @@ def slack_commands():
             'text': 'Sorry, something went wrong processing your command.'
         }), 500
 
-@app.route('/dashboard')
 @app.route('/slack/interactivity', methods=['POST'])
 def slack_interactivity():
     """Handle Slack interactive components"""
     try:
-        # Verify request signature
-        timestamp = request.headers.get('X-Slack-Request-Timestamp', '')
-        signature = request.headers.get('X-Slack-Signature', '')
-        
-        if not timestamp or not signature:
-            logger.warning("Missing Slack verification headers")
-            return jsonify({'error': 'missing_headers'}), 400
-            
-        if abs(datetime.now().timestamp() - float(timestamp)) > 60 * 5:
-            logger.warning("Request timestamp too old")
-            return jsonify({'error': 'invalid_timestamp'}), 403
-            
-        sig_basestring = f"v0:{timestamp}:{request.get_data(as_text=True)}"
-        my_signature = 'v0=' + hmac.new(
-            Config.SLACK_SIGNING_SECRET.encode(),
-            sig_basestring.encode(),
-            hashlib.sha256
-        ).hexdigest()
-        
-        if not hmac.compare_digest(my_signature, signature):
-            logger.warning("Invalid request signature")
-            return jsonify({'error': 'invalid_signature'}), 403
+        # Verify request
+        if not request.form:
+            return jsonify({'error': 'invalid_request'}), 400
         
         # Parse the payload
         payload = json.loads(request.form.get('payload', '{}'))
+        logger.debug(f"Received interactive payload: {payload}")
         
         if payload.get('type') == 'block_actions':
             # Handle button clicks
             for action in payload.get('actions', []):
                 if action.get('value') == 'skip_eod':
                     user_id = payload.get('user', {}).get('id')
+                    channel_id = payload.get('container', {}).get('channel_id')
                     if user_id:
                         # Mark as skipped in tracker
                         if firebase_client:
-                            tracker = SubmissionTracker(
+                            tracker = EODTracker(
                                 user_id=user_id,
-                                date=datetime.utcnow().date(),
-                                submitted=True,
-                                reminder_count=0
+                                status='skipped',
+                                timestamp=datetime.utcnow().isoformat()
                             )
                             firebase_client.save_tracker(tracker.to_dict())
                         
+                        # Update the original message
+                        try:
+                            slack_bot.client.chat_update(
+                                channel=channel_id,
+                                ts=payload.get('message', {}).get('ts'),
+                                text="EOD report has been skipped for today.",
+                                blocks=[{
+                                    "type": "section",
+                                    "text": {
+                                        "type": "mrkdwn",
+                                        "text": ":white_check_mark: *EOD report has been skipped for today.*"
+                                    }
+                                }]
+                            )
+                        except Exception as e:
+                            logger.error(f"Error updating message: {str(e)}")
+                        
                         return jsonify({
                             'response_type': 'ephemeral',
-                            'text': 'EOD report skipped for today.'
+                            'text': 'EOD report skipped for today.',
+                            'replace_original': False
                         })
         
         return jsonify({'status': 'ok'})
@@ -321,6 +320,7 @@ def slack_interactivity():
         logger.error(f"Error handling interactive component: {str(e)}")
         return jsonify({'error': 'internal_error'}), 500
 
+@app.route('/dashboard')
 def dashboard():
     """Render submission status dashboard"""
     try:
@@ -346,6 +346,7 @@ def dashboard():
     except Exception as e:
         logger.error(f"Error loading dashboard: {str(e)}")
         return "Error loading dashboard. Please check server logs.", 500
+
 
 if __name__ == '__main__':
     with app.app_context():

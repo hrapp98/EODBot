@@ -96,3 +96,17 @@ class SubmissionTracker:
             'submitted': self.submitted,
             'reminder_count': self.reminder_count
         }
+
+class EODTracker:
+    def __init__(self, user_id, status, timestamp):
+        self.user_id = user_id
+        self.status = status  # 'submitted', 'skipped', or 'pending'
+        self.timestamp = timestamp
+
+    def to_dict(self):
+        """Convert EOD tracker to dictionary format for Firebase"""
+        return {
+            'user_id': self.user_id,
+            'status': self.status,
+            'timestamp': self.timestamp
+        }

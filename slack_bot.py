@@ -94,13 +94,17 @@ class SlackBot:
         """Send error message to user"""
         self.send_message(user_id, "Sorry, there was an error processing your EOD report. Please try again.")
 
-    def send_message(self, user_id, text):
+    def send_message(self, user_id, text, thread_ts=None):
         """Send a simple message to a user"""
         try:
-            self.client.chat_postMessage(
-                channel=user_id,
-                text=text
-            )
+            message_params = {
+                'channel': user_id,
+                'text': text
+            }
+            if thread_ts:
+                message_params['thread_ts'] = thread_ts
+                
+            self.client.chat_postMessage(**message_params)
         except SlackApiError as e:
             logger.error(f"Error sending message: {e.response['error']}")
             
