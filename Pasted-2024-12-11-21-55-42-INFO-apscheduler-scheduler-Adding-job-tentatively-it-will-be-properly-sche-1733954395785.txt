@@ -1,0 +1,77 @@
+2024-12-11 21:55:42 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2024-12-11 16:55:42.68
+5de68d4a
+User
+2024-12-11 21:55:42 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2024-12-11 16:55:42.68
+5de68d4a
+User
+2024-12-11 21:55:42 [INFO] apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2024-12-11 16:55:42.68
+5de68d4a
+User
+2024-12-11 21:55:42 [INFO] apscheduler.scheduler: Added job "send_eod_prompts" to job store "default"
+2024-12-11 16:55:42.68
+5de68d4a
+User
+2024-12-11 21:55:42 [INFO] apscheduler.scheduler: Added job "send_reminders" to job store "default"
+2024-12-11 16:55:42.68
+5de68d4a
+User
+2024-12-11 21:55:42 [INFO] apscheduler.scheduler: Added job "generate_weekly_summary" to job store "default"
+2024-12-11 16:55:42.68
+5de68d4a
+User
+2024-12-11 21:55:42 [INFO] apscheduler.scheduler: Scheduler started
+2024-12-11 16:55:42.68
+5de68d4a
+User
+2024-12-11 21:55:42 [INFO] __main__: Scheduler setup complete
+2024-12-11 16:55:42.68
+5de68d4a
+User
+2024-12-11 21:55:42 [INFO] __main__: Starting Flask server on port 5000...
+2024-12-11 16:55:42.70
+5de68d4a
+User
+* Serving Flask app 'app'
+2024-12-11 16:55:42.70
+5de68d4a
+User
+* Debug mode: off
+2024-12-11 16:55:42.78
+5de68d4a
+User
+2024-12-11 21:55:42 [INFO] werkzeug: WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+2024-12-11 16:55:42.78
+5de68d4a
+User
+* Running on all addresses (0.0.0.0)
+2024-12-11 16:55:42.78
+5de68d4a
+User
+* Running on http://127.0.0.1:5000
+2024-12-11 16:55:42.78
+5de68d4a
+User
+* Running on http://10.0.25.73:5000
+2024-12-11 16:55:42.78
+5de68d4a
+User
+2024-12-11 21:55:42 [INFO] werkzeug: Press CTRL+C to quit
+2024-12-11 16:55:48.17
+5de68d4a
+User
+2024-12-11 21:55:48 [INFO] werkzeug: 127.0.0.1 - - [11/Dec/2024 21:55:48] "GET / HTTP/1.1" 200 -
+2024-12-11 16:55:49.67
+bd535dce
+System
+system: received signal terminated
+2024-12-11 16:55:49.70
+bd535dce
+System
+command finished with error [sh -c PORT=3000 python app.py]: signal: terminated
+2024-12-11 16:55:49.76
+bd535dce
+System
+main done, exiting
