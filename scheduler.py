@@ -12,49 +12,42 @@ logger = logging.getLogger(__name__)
 
 def setup_scheduler(app):
     """Initialize and start the scheduler"""
-    try:
-        logger.info("Initializing BackgroundScheduler...")
-        scheduler = BackgroundScheduler(
-            daemon=True,
-            job_defaults={'misfire_grace_time': 15*60}  # 15 minute grace time for misfires
-        )
-        
-        # EOD Reminder at 5 PM ET
-        scheduler.add_job(
-            send_eod_prompts,
-            CronTrigger(hour=17, minute=0, timezone="America/New_York"),
-            args=[app],
-            id='eod_prompts',
-            replace_existing=True
-        )
-        
-        # Final Reminder at 5:30 PM ET
-        scheduler.add_job(
-            send_reminders,
-            CronTrigger(hour=17, minute=30, timezone="America/New_York"),
-            args=[app],
-            id='final_reminders',
-            replace_existing=True
-        )
-        
-        # Weekly Summary every Friday at 5 PM ET
-        scheduler.add_job(
-            generate_weekly_summary,
-            CronTrigger(day_of_week='fri', hour=17, minute=0, timezone="America/New_York"),
-            args=[app],
-            id='weekly_summary',
-            replace_existing=True
-        )
-        
-        logger.info("Starting scheduler...")
-        scheduler.start()
-        logger.info("Scheduler started successfully")
-        return scheduler
-        
-    except Exception as e:
-        logger.error(f"Failed to setup scheduler: {str(e)}")
-        logger.error("Scheduler setup failed but continuing without it")
-        return None
+    scheduler = BackgroundScheduler()
+    
+    # EOD Reminder at 5 PM ET
+    scheduler.add_job(
+        send_eod_prompts,
+        CronTrigger(hour=17, minute=0, timezone="America/New_York"),
+        args=[app],
+        id='eod_prompts'
+    )
+    
+    # Final Reminder at 5:30 PM ET
+    scheduler.add_job(
+        send_reminders,
+        CronTrigger(hour=17, minute=30, timezone="America/New_York"),
+        args=[app],
+        id='final_reminders'
+    )
+    
+    # Weekly Summary every Friday at 5 PM ET
+    scheduler.add_job(
+        generate_weekly_summary,
+        CronTrigger(day_of_week='fri', hour=17, minute=0, timezone="America/New_York"),
+        args=[app],
+        id='weekly_summary'
+    )
+    
+    # Remove test reminder job
+    # scheduler.add_job(
+    #     send_test_reminder,
+    #     CronTrigger(minute='*'),
+    #     args=[app],
+    #     id='test_reminder'
+    # )
+    
+    scheduler.start()
+    return scheduler
 
 def send_test_reminder(app):
     """Send test reminder to Harlan"""
