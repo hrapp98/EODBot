@@ -489,8 +489,8 @@ if __name__ == '__main__':
             setup_scheduler(app)
             logger.info("Scheduler setup complete")
             
-            # Get port from environment variable or default to 5000
-            port = int(os.environ.get('PORT', 5000))
+            # Get port from environment variable or default to 3000
+            port = int(os.environ.get('PORT', 3000))
             
             # Verify critical configurations
             if not Config.SLACK_SIGNING_SECRET:
