@@ -297,17 +297,22 @@ def handle_message(event):
         if event.get('bot_id') or event.get('subtype') == 'bot_message':
             return
             
-        # DON'T handle /eod command here - it's handled by slack_commands()
-        # Only handle direct EOD submissions in the format "submit eod: ..."
-        if text.startswith('submit eod:'):
-            handle_eod_submission(event)
-        # Silently ignore other messages (including /eod commands)
+        # Only handle /eod command
+        if text.startswith('/eod'):
+            trigger_id = event.get('trigger_id')
+            if trigger_id:
+                # Pass the channel ID in private_metadata
+                private_metadata = json.dumps({'channel_id': channel_id})
+                slack_bot.send_eod_prompt(trigger_id, private_metadata)
+            else:
+                slack_bot.send_message(user_id, "Sorry, I couldn't process that command. Please try again.")
+        # Silently ignore other messages
         return
             
     except Exception as e:
         logger.error(f"Error handling message: {str(e)}")
-        # Only send error message if we were trying to handle an EOD submission
-        if text and text.startswith('submit eod:'):
+        # Only send error message if we were trying to handle an /eod command
+        if text and text.startswith('/eod'):
             slack_bot.send_error_message(user_id)
 
 def handle_app_mention(event):
