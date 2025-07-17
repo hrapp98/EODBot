@@ -1,0 +1,102 @@
+/* Make the reports table scrollable */
+.reports-table-container {
+    max-height: 600px;
+    overflow-y: auto;
+    margin-bottom: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.25rem;
+}
+
+.reports-table {
+    position: relative;
+    margin-bottom: 0;
+    font-size: 0.875rem; /* Smaller font size for the table */
+}
+
+.reports-table thead {
+    position: sticky;
+    top: 0;
+    background-color: var(--bs-body-bg);
+    z-index: 10;
+}
+
+.reports-table th {
+    position: sticky;
+    top: 0;
+    background-color: var(--bs-body-bg);
+    z-index: 10;
+    border-bottom: 2px solid var(--border-color);
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
+/* Add shadow to the header when scrolling */
+.reports-table-container.scrolled thead {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Ensure table cells don't get too large */
+.reports-table td {
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 0.5rem 0.75rem; /* Smaller padding for more compact rows */
+}
+
+/* Text cell styling */
+.text-cell {
+    position: relative;
+    cursor: pointer;
+}
+
+.text-cell:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.truncated-text {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Report detail modal styles */
+.report-section {
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 1rem;
+}
+
+.report-section:last-child {
+    border-bottom: none;
+}
+
+.report-section-title {
+    color: var(--primary-color);
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+#reportDetailModal .modal-dialog {
+    max-width: 700px;
+}
+
+#reportDetailContent {
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+/* Load more button styling */
+#loadMoreButton {
+    background-color: rgba(99, 102, 241, 0.05);
+}
+
+#loadMoreReportsBtn {
+    transition: all 0.2s;
+}
+
+#loadMoreReportsBtn:hover {
+    background-color: var(--primary-color);
+    color: white;
+} 

@@ -86,3 +86,6 @@ class Config:
     
     # Debug mode - set to False for production
     DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
+
+    # Add to Config class
+    TEST_MODE = os.environ.get('TEST_MODE', 'false').lower() == 'true'

@@ -4,6 +4,8 @@ from config import Config
 from datetime import datetime
 import logging
 import json
+from functools import lru_cache
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -11,6 +13,8 @@ class SlackBot:
     def __init__(self):
         self.client = WebClient(token=Config.SLACK_BOT_OAUTH_TOKEN)
         self._ensure_in_channels()
+        self._user_cache = {}  # Cache for user info
+        self._cache_expiry = 3600  # Cache expiry in seconds (1 hour)
     
     def _ensure_in_channels(self):
         """Ensure bot is in required channels"""
@@ -142,31 +146,45 @@ class SlackBot:
     
     def _format_report_for_channel(self, report_data):
         """Format EOD report for Slack channel display"""
-        client_feedback = report_data.get('client_feedback', '').strip()
-        client_feedback_section = f"""
-*Client Feedback:*
-{client_feedback}
-""" if client_feedback else ""
-
+        # Ensure all required fields are present
+        required_fields = [
+            'user_id',
+            'short_term_projects',
+            'long_term_projects',
+            'blockers',
+            'next_day_goals',
+            'tools_used',
+            'help_needed',
+            'client_feedback'
+        ]
+        
+        for field in required_fields:
+            if not report_data.get(field):
+                raise ValueError(f"Missing required field: {field}")
+        
+        # Format the report with all fields
         return f"""
-*EOD Report from <@{report_data['user_id']}>*
-*Short-term Projects:*
-{report_data['short_term_projects']}
+        *EOD Report from <@{report_data['user_id']}>*
+        *Short-term Projects:*
+        {report_data['short_term_projects']}
 
-*Long-term Projects:*
-{report_data['long_term_projects']}
+        *Long-term Projects:*
+        {report_data['long_term_projects']}
 
-*Blockers/Challenges:*
-{report_data['blockers']}
+        *Blockers/Challenges:*
+        {report_data['blockers']}
 
-*Tomorrow's Goals:*
-{report_data['next_day_goals']}
+        *Tomorrow's Goals:*
+        {report_data['next_day_goals']}
 
-*Software Tools Used Today:*
-{report_data['tools_used']}
-{client_feedback_section}
-*Need Help?*
-{report_data['help_needed']}
+        *Software Tools Used Today:*
+        {report_data['tools_used']}
+
+        *Client Feedback:*
+        {report_data['client_feedback']}
+
+        *Need Help?*
+        {report_data['help_needed']}
         """.strip()
     
     def _format_dict_items(self, items):
@@ -324,8 +342,7 @@ class SlackBot:
                     "multiline": True,
                     "initial_value": existing_data.get('client_feedback', '') if existing_data else '',
                     "placeholder": {"type": "plain_text", "text": "Any feedback received from clients?"}
-                },
-                "optional": True
+                }
             }
         ]
 
@@ -394,3 +411,158 @@ class SlackBot:
                 
         except Exception as e:
             logger.error(f"Error in post_weekly_summary: {str(e)}")
+
+    def get_user_submission_calendar(self, user_id, year=None):
+        """
+        Get user's submission history in calendar format
+        
+        Args:
+            user_id: Slack user ID
+            year: Optional year to filter (defaults to current year)
+            
+        Returns:
+            Dictionary with dates as keys and submission status as values
+        """
+        try:
+            # Default to current year if not specified
+            if not year:
+                year = datetime.now().year
+                
+            # Import here to avoid circular imports
+            from app import firebase_client
+            if not firebase_client:
+                logger.error("Firebase client not initialized")
+                return {}
+                
+            # Query all submissions for this user without ordering
+            # This avoids the need for a composite index
+            submissions = {}
+            
+            try:
+                # Get all submissions for this user without ordering by timestamp
+                docs = firebase_client.db.collection('eod_reports')\
+                    .where('user_id', '==', user_id)\
+                    .stream()
+                    
+                for doc in docs:
+                    data = doc.to_dict()
+                    timestamp = data.get('timestamp')
+                    
+                    if not timestamp:
+                        continue
+                        
+                    # Convert to datetime if it's a string
+                    if isinstance(timestamp, str):
+                        try:
+                            timestamp = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                        except ValueError:
+                            continue
+                    
+                    # Get the date
+                    submission_date = timestamp.date()
+                    
+                    # Only include dates in the requested year
+                    if submission_date.year == year:
+                        # Store the submission date with the document ID
+                        submissions[submission_date.isoformat()] = {
+                            'id': doc.id,
+                            'status': 'submitted'
+                        }
+                
+                logger.info(f"Found {len(submissions)} submissions for user {user_id} in {year}")
+            except Exception as e:
+                logger.error(f"Error querying Firebase: {str(e)}")
+                # If the error is about missing index, provide guidance
+                if "The query requires an index" in str(e):
+                    logger.error("This query requires a composite index. Please create the index in the Firebase console.")
+                    # Fall back to a simpler query without ordering
+                    try:
+                        logger.info("Attempting fallback query without ordering...")
+                        docs = firebase_client.db.collection('eod_reports')\
+                            .where('user_id', '==', user_id)\
+                            .stream()
+                        
+                        for doc in docs:
+                            data = doc.to_dict()
+                            timestamp = data.get('timestamp')
+                            
+                            if not timestamp:
+                                continue
+                                
+                            # Process as before...
+                            if isinstance(timestamp, str):
+                                try:
+                                    timestamp = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                                except ValueError:
+                                    continue
+                            
+                            submission_date = timestamp.date()
+                            
+                            if submission_date.year == year:
+                                submissions[submission_date.isoformat()] = {
+                                    'id': doc.id,
+                                    'status': 'submitted'
+                                }
+                        
+                        logger.info(f"Fallback query found {len(submissions)} submissions")
+                    except Exception as fallback_error:
+                        logger.error(f"Fallback query also failed: {str(fallback_error)}")
+            
+            return submissions
+            
+        except Exception as e:
+            logger.error(f"Error getting user submission calendar: {str(e)}")
+            return {}
+
+    def get_user_profile_data(self, user_id):
+        """Get comprehensive user profile data including submission history"""
+        try:
+            # Get user info from Slack
+            user_info = self.client.users_info(user=user_id)
+            
+            if not user_info or not user_info.get('ok', False):
+                logger.error(f"Could not retrieve user info for {user_id}")
+                return None
+                
+            user = user_info['user']
+            
+            # Build profile data
+            profile_data = {
+                'id': user_id,
+                'name': user.get('real_name', 'Unknown'),
+                'display_name': user.get('profile', {}).get('display_name', ''),
+                'title': user.get('profile', {}).get('title', ''),
+                'email': user.get('profile', {}).get('email', ''),
+                'image': user.get('profile', {}).get('image_512', ''),
+                'timezone': user.get('tz', 'Unknown'),
+                'submission_calendar': self.get_user_submission_calendar(user_id)
+            }
+            
+            return profile_data
+            
+        except SlackApiError as e:
+            logger.error(f"Error getting user profile data: {e.response['error']}")
+            return None
+        except Exception as e:
+            logger.error(f"Error in get_user_profile_data: {str(e)}")
+            return None
+
+    # Add caching for users_info method
+    def users_info(self, user):
+        """Cached wrapper for Slack users_info API"""
+        current_time = time.time()
+        
+        # Check if user is in cache and not expired
+        if user in self._user_cache:
+            cache_time, user_data = self._user_cache[user]
+            if current_time - cache_time < self._cache_expiry:
+                return user_data
+        
+        # If not in cache or expired, fetch from API
+        try:
+            response = self.client.users_info(user=user)
+            self._user_cache[user] = (current_time, response)
+            return response
+        except Exception as e:
+            logger.error(f"Error fetching user info: {str(e)}")
+            return None

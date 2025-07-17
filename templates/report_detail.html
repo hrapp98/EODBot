@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EOD Report Detail</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <style>
+        /* Use the same styles from dashboard.html */
+        :root {
+            --primary-color: #6366f1;
+            --card-bg: #1e293b;
+            --body-bg: #0f172a;
+            --text-color: #e2e8f0;
+            --border-color: #334155;
+        }
+        
+        body {
+            background-color: var(--body-bg);
+            color: var(--text-color);
+        }
+        
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+        }
+        
+        .report-header {
+            background: linear-gradient(45deg, var(--primary-color), #4f46e5);
+            padding: 2rem;
+            border-radius: 0.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .report-section {
+            margin-bottom: 1.5rem;
+        }
+        
+        .report-section-title {
+            color: var(--primary-color);
+            margin-bottom: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container py-4">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="/">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="/dashboard/user/{{ report.user_id }}">{{ user.name }}</a></li>
+                <li class="breadcrumb-item active">Report Detail</li>
+            </ol>
+        </nav>
+        
+        <div class="report-header">
+            <div class="row align-items-center">
+                <div class="col">
+                    <div class="d-flex align-items-center">
+                        {% if user.image %}
+                            <img src="{{ user.image }}" alt="{{ user.name }}" class="rounded-circle me-3" style="width: 48px; height: 48px;">
+                        {% endif %}
+                        <div>
+                            <h1 class="h3 mb-1 text-white">{{ user.name }}</h1>
+                            <p class="mb-0 text-white-50">{{ formatted_date }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-lg-8">
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <div class="report-section">
+                            <h5 class="report-section-title">Short-term Projects</h5>
+                            <p>{{ report.short_term_projects }}</p>
+                        </div>
+                        
+                        <div class="report-section">
+                            <h5 class="report-section-title">Long-term Projects</h5>
+                            <p>{{ report.long_term_projects }}</p>
+                        </div>
+                        
+                        {% if report.blockers %}
+                        <div class="report-section">
+                            <h5 class="report-section-title">Blockers</h5>
+                            <p>{{ report.blockers }}</p>
+                        </div>
+                        {% endif %}
+                        
+                        <div class="report-section">
+                            <h5 class="report-section-title">Next Day Goals</h5>
+                            <p>{{ report.next_day_goals }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-lg-4">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Additional Information</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if report.tools_used %}
+                        <div class="mb-3">
+                            <h6 class="text-muted">Tools Used</h6>
+                            <p>{{ report.tools_used }}</p>
+                        </div>
+                        {% endif %}
+                        
+                        {% if report.help_needed %}
+                        <div class="mb-3">
+                            <h6 class="text-muted">Help Needed</h6>
+                            <p>{{ report.help_needed }}</p>
+                        </div>
+                        {% endif %}
+                        
+                        {% if report.client_feedback %}
+                        <div class="mb-3">
+                            <h6 class="text-muted">Client Feedback</h6>
+                            <p>{{ report.client_feedback }}</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html> 

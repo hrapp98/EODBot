@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+
+{% block title %}Team Members{% endblock %}
+
+{% block head_extra %}
+<style>
+    .team-card {
+        transition: transform 0.2s, box-shadow 0.2s;
+        height: 100%;
+        cursor: pointer;
+    }
+    
+    .team-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+    }
+    
+    .user-avatar-lg {
+        width: 100px;
+        height: 100px;
+        border-radius: 50%;
+        object-fit: cover;
+    }
+    
+    .avatar-placeholder {
+        width: 100px;
+        height: 100px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2.5rem;
+        color: white;
+    }
+    
+    .status-indicator {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+    }
+    
+    .search-container {
+        max-width: 400px;
+    }
+    
+    .filter-btn.active {
+        background-color: #0d6efd;
+        color: white;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Team Members</h1>
+        
+        <div class="d-flex gap-2">
+            <!-- Admin actions -->
+            <button id="syncUsersBtn" class="btn btn-outline-secondary me-2">
+                <i class="bi bi-arrow-repeat"></i> Sync Users
+            </button>
+            
+            <!-- Search box -->
+            <div class="search-container">
+                <input type="text" id="teamSearch" class="form-control" placeholder="Search by name, title, or email...">
+            </div>
+            
+            <!-- Filter buttons -->
+            <div class="d-flex justify-content-center mb-4">
+                <div class="btn-group" role="group">
+                    <button class="btn btn-outline-primary filter-btn active" data-filter="all">All</button>
+                    <button class="btn btn-outline-success filter-btn" data-filter="submitted">Submitted</button>
+                    <button class="btn btn-outline-danger filter-btn" data-filter="missed">Missed</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Loading indicator -->
+    <div id="loadingIndicator" class="text-center my-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-2">Loading team data...</p>
+    </div>
+    
+    <!-- Team members grid - will be populated by JavaScript -->
+    <div id="teamGrid" class="row row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xl-4 g-4" style="display: none;">
+        <!-- Cards will be inserted here by JavaScript -->
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const teamGrid = document.getElementById('teamGrid');
+    const loadingIndicator = document.getElementById('loadingIndicator');
+    
+    // Fetch user data asynchronously
+    fetch('/api/team-data')
+        .then(response => response.json())
+        .then(users => {
+            // Hide loading indicator and show grid
+            loadingIndicator.style.display = 'none';
+            teamGrid.style.display = 'flex';
+            
+            // Sort users by name
+            users.sort((a, b) => a.name.localeCompare(b.name));
+            
+            // Create and append user cards
+            users.forEach(user => {
+                const card = createUserCard(user);
+                teamGrid.appendChild(card);
+            });
+            
+            // Initialize search and filter functionality
+            initializeSearchAndFilter();
+        })
+        .catch(error => {
+            console.error('Error fetching team data:', error);
+            loadingIndicator.innerHTML = '<div class="alert alert-danger">Error loading team data. Please try refreshing the page.</div>';
+        });
+    
+    function createUserCard(user) {
+        console.log("Creating card for user:", user); // Debug log
+        
+        const col = document.createElement('div');
+        col.className = 'col team-member-card';
+        col.dataset.name = (user.name || '').toLowerCase();
+        col.dataset.title = (user.title || '').toLowerCase();
+        col.dataset.email = (user.email || '').toLowerCase();
+        col.dataset.status = user.today_status || 'missed';
+        
+        // Create avatar or placeholder
+        let avatarHtml = '';
+        if (user.image) {
+            avatarHtml = `<img src="${user.image}" alt="${user.name}" class="user-avatar-lg mb-3">`;
+        } else {
+            const initials = user.name ? user.name.split(' ').map(n => n[0]).join('').toUpperCase() : '?';
+            avatarHtml = `<div class="avatar-placeholder mb-3 bg-primary">${initials}</div>`;
+        }
+        
+        // Status indicator
+        const statusClass = user.today_status === 'submitted' ? 'bg-success' : 'bg-danger';
+        const statusText = user.today_status === 'submitted' ? 'Submitted' : 'Missed';
+        
+        // Make sure user.id exists before creating the link
+        if (!user.id) {
+            console.error("User missing ID:", user);
+            user.id = "unknown"; // Fallback
+        }
+        
+        // Create the card with a link wrapper
+        col.innerHTML = `
+            <a href="/user/${user.id}" class="text-decoration-none" style="display: block;">
+                <div class="card team-card">
+                    <div class="card-body text-center position-relative">
+                        <span class="badge ${statusClass} status-indicator">${statusText}</span>
+                        ${avatarHtml}
+                        <h5 class="card-title text-body">${user.name || 'Unknown'}</h5>
+                        <p class="card-text text-muted">${user.title || 'No title'}</p>
+                        <p class="card-text"><small>${user.email || 'No email'}</small></p>
+                    </div>
+                </div>
+            </a>
+        `;
+        
+        return col;
+    }
+    
+    function initializeSearchAndFilter() {
+        // Search functionality
+        const searchInput = document.getElementById('teamSearch');
+        const teamCards = document.querySelectorAll('.team-member-card');
+        
+        searchInput.addEventListener('input', function() {
+            const searchTerm = this.value.toLowerCase().trim();
+            
+            teamCards.forEach(card => {
+                const name = card.dataset.name || '';
+                const title = card.dataset.title || '';
+                const email = card.dataset.email || '';
+                
+                if (name.includes(searchTerm) || title.includes(searchTerm) || email.includes(searchTerm)) {
+                    card.style.display = '';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        });
+        
+        // Filter functionality
+        const filterButtons = document.querySelectorAll('.filter-btn');
+        
+        filterButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                // Update active button
+                filterButtons.forEach(btn => btn.classList.remove('active'));
+                this.classList.add('active');
+                
+                const filter = this.dataset.filter;
+                
+                teamCards.forEach(card => {
+                    if (filter === 'all' || card.dataset.status === filter) {
+                        card.style.display = '';
+                    } else {
+                        card.style.display = 'none';
+                    }
+                });
+            });
+        });
+    }
+
+    document.getElementById('syncUsersBtn').addEventListener('click', function() {
+        this.disabled = true;
+        this.innerHTML = '<i class="bi bi-arrow-repeat"></i> Syncing...';
+        
+        fetch('/api/sync-users', {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Users synced successfully!');
+                location.reload();
+            } else {
+                alert('Error syncing users: ' + data.error);
+            }
+        })
+        .catch(error => {
+            alert('Error syncing users: ' + error);
+        })
+        .finally(() => {
+            this.disabled = false;
+            this.innerHTML = '<i class="bi bi-arrow-repeat"></i> Sync Users';
+        });
+    });
+});
+</script>
+{% endblock %} 

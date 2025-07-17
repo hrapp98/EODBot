@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+
+{% block title %}Missed Submissions{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h4 class="mb-0">Missed Submissions</h4>
+            <div>
+                <select id="dateRangeSelect" class="form-select form-select-sm">
+                    <option value="7">Last 7 days</option>
+                    <option value="14">Last 14 days</option>
+                    <option value="30" selected>Last 30 days</option>
+                </select>
+            </div>
+        </div>
+        <div class="card-body">
+            <!-- Loading indicator -->
+            <div id="loadingIndicator" class="text-center my-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2">Loading missed submissions data...</p>
+            </div>
+            
+            <!-- Results table - will be populated by JavaScript -->
+            <div id="resultsContainer" style="display: none;">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Missed Dates</th>
+                                <th>Consecutive Days Missed</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="missedSubmissionsBody">
+                            <!-- Will be populated by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- No results message -->
+            <div id="noResultsMessage" class="alert alert-success" style="display: none;">
+                <i class="bi bi-check-circle-fill me-2"></i> No missed submissions in the selected time period!
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Get current days value from URL or default to 30
+    const urlPath = window.location.pathname;
+    let days = 30;
+    if (urlPath.includes('/missed/')) {
+        days = parseInt(urlPath.split('/missed/')[1]) || 30;
+    }
+    
+    // Set the select value based on days
+    const dateRangeSelect = document.getElementById('dateRangeSelect');
+    dateRangeSelect.value = days.toString();
+    
+    // Handle date range selection
+    dateRangeSelect.addEventListener('change', function() {
+        window.location.href = '/missed/' + this.value;
+    });
+    
+    // Load missed submissions data
+    loadMissedSubmissions(days);
+    
+    // Function to load missed submissions data
+    async function loadMissedSubmissions(days) {
+        try {
+            const response = await fetch(`/api/missed-submissions/${days}`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            
+            // Hide loading indicator
+            document.getElementById('loadingIndicator').style.display = 'none';
+            
+            // Check if we have any results
+            if (Object.keys(data).length === 0) {
+                document.getElementById('noResultsMessage').style.display = 'block';
+                return;
+            }
+            
+            // Show results container
+            document.getElementById('resultsContainer').style.display = 'block';
+            
+            // Get the table body
+            const tableBody = document.getElementById('missedSubmissionsBody');
+            tableBody.innerHTML = '';
+            
+            // Sort users by consecutive missed days (descending)
+            const sortedUsers = Object.entries(data).sort((a, b) => {
+                return b[1].consecutive - a[1].consecutive;
+            });
+            
+            // Add rows for each user
+            sortedUsers.forEach(([userId, userData], index) => {
+                const row = document.createElement('tr');
+                
+                // User cell
+                const userCell = document.createElement('td');
+                userCell.innerHTML = `
+                    <div class="d-flex align-items-center">
+                        ${userData.image ? 
+                            `<img src="${userData.image}" alt="${userData.name}" class="rounded-circle me-2" style="width: 32px; height: 32px;">` : 
+                            ''}
+                        ${userData.name}
+                    </div>
+                `;
+                row.appendChild(userCell);
+                
+                // Missed dates cell
+                const datesCell = document.createElement('td');
+                datesCell.innerHTML = `
+                    <div>
+                        <span class="badge bg-danger">${userData.total_missed} days total</span>
+                        <span class="badge bg-secondary">${userData.range_missed} in selected range</span>
+                    </div>
+                    <button class="btn btn-sm btn-link" type="button" data-bs-toggle="collapse" data-bs-target="#dates${index}">
+                        Show dates
+                    </button>
+                    <div class="collapse mt-2" id="dates${index}">
+                        <div class="card card-body">
+                            <small class="text-muted mb-2">Only counting days after first submission (${new Date(userData.first_submission).toLocaleDateString('en-US')})</small>
+                            <ul class="list-unstyled mb-0">
+                                ${userData.dates.map(date => {
+                                    const dateObj = new Date(date);
+                                    return `<li>${dateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</li>`;
+                                }).join('')}
+                            </ul>
+                        </div>
+                    </div>
+                `;
+                row.appendChild(datesCell);
+                
+                // Consecutive days cell
+                const consecutiveCell = document.createElement('td');
+                let badgeClass = 'bg-info';
+                if (userData.consecutive > 3) {
+                    badgeClass = 'bg-danger';
+                } else if (userData.consecutive > 1) {
+                    badgeClass = 'bg-warning text-dark';
+                }
+                
+                consecutiveCell.innerHTML = `
+                    <span class="badge ${badgeClass}">${userData.consecutive} day${userData.consecutive !== 1 ? 's' : ''}</span>
+                `;
+                row.appendChild(consecutiveCell);
+                
+                // Actions cell
+                const actionsCell = document.createElement('td');
+                actionsCell.innerHTML = `
+                    <a href="/user/${userId}" class="btn btn-sm btn-outline-primary">View Profile</a>
+                    <button class="btn btn-sm btn-outline-secondary send-reminder" data-user-id="${userId}">Send Reminder</button>
+                `;
+                row.appendChild(actionsCell);
+                
+                tableBody.appendChild(row);
+            });
+            
+            // Set up reminder buttons
+            setupReminderButtons();
+            
+        } catch (error) {
+            console.error('Error loading missed submissions:', error);
+            document.getElementById('loadingIndicator').style.display = 'none';
+            document.getElementById('resultsContainer').style.display = 'none';
+            
+            // Show error message
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'alert alert-danger';
+            errorDiv.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-2"></i> Error loading missed submissions data. Please try again later.';
+            document.querySelector('.card-body').appendChild(errorDiv);
+        }
+    }
+    
+    // Function to set up reminder buttons
+    function setupReminderButtons() {
+        const reminderButtons = document.querySelectorAll('.send-reminder');
+        reminderButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const userId = this.getAttribute('data-user-id');
+                
+                // Disable button and show loading state
+                this.disabled = true;
+                this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Sending...';
+                
+                // Send reminder API request
+                fetch('/api/send_reminder', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ user_id: userId }),
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        this.innerHTML = '<i class="bi bi-check"></i> Sent';
+                        this.classList.remove('btn-outline-secondary');
+                        this.classList.add('btn-success');
+                    } else {
+                        this.innerHTML = '<i class="bi bi-exclamation-triangle"></i> Failed';
+                        this.classList.remove('btn-outline-secondary');
+                        this.classList.add('btn-danger');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    this.innerHTML = '<i class="bi bi-exclamation-triangle"></i> Error';
+                    this.classList.remove('btn-outline-secondary');
+                    this.classList.add('btn-danger');
+                });
+            });
+        });
+    }
+});
+</script>
+{% endblock %} 

@@ -15,4 +15,7 @@ dependencies = [
     "python-dotenv>=1.0.1",
     "sift-stack-py>=0.2.2",
     "slack-sdk>=3.33.5",
+    "markupsafe>=3.0.2",
+    "flask-assets>=2.1.0",
+    "flask-compress>=1.17",
 ]

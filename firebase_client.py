@@ -77,8 +77,24 @@ class FirebaseClient:
             self.db = None
 
     def save_eod_report(self, user_id, report_data):
-        """Save EOD report to Firestore"""
+        """Save EOD report to Firestore and automatically add user if not exists"""
         try:
+            # All fields are required
+            required_fields = {
+                'short_term_projects',
+                'long_term_projects',
+                'blockers',
+                'next_day_goals',
+                'tools_used',
+                'help_needed',
+                'client_feedback'
+            }
+            
+            # Check required fields
+            missing_fields = [field for field in required_fields if not report_data.get(field)]
+            if missing_fields:
+                raise ValueError(f"Missing required fields: {', '.join(missing_fields)}")
+            
             # Get user info from Slack
             from slack_client import SlackClient
             slack_client = SlackClient(Config.SLACK_BOT_OAUTH_TOKEN)
@@ -100,12 +116,42 @@ class FirebaseClient:
             doc_ref = self.db.collection('eod_reports').document()
             doc_ref.set(report_data)
             
+            # Auto-add user to users collection if not already exists
+            self._ensure_user_exists(user_id, report_data['user_name'], report_data['user_email'])
+            
             logger.info(f"Successfully saved EOD report for user {user_id} ({report_data['user_name']})")
             return doc_ref.id
             
         except Exception as e:
             logger.error(f"Error saving EOD report: {str(e)}")
             raise
+
+    def _ensure_user_exists(self, slack_id, name, email):
+        """Ensure user exists in the users collection"""
+        try:
+            # Check if user already exists
+            users_ref = self.db.collection('users')
+            query = users_ref.where('slack_id', '==', slack_id).limit(1)
+            existing_users = list(query.stream())
+            
+            if not existing_users:
+                # User doesn't exist, create new user
+                new_user = {
+                    'slack_id': slack_id,
+                    'name': name,
+                    'email': email,
+                    'status': 'active',  # Default to active
+                    'created_at': datetime.now(ZoneInfo("UTC")),
+                    'auto_added': True  # Flag to indicate this user was auto-added
+                }
+                
+                users_ref.document().set(new_user)
+                logger.info(f"Auto-added new user: {name} ({slack_id})")
+                
+        except Exception as e:
+            logger.error(f"Error ensuring user exists: {str(e)}")
+            # Don't raise the exception - we don't want to block the EOD submission
+            # if there's an issue with user management
 
     def get_user_reports(self, user_id, date=None):
         """Get EOD reports for a specific user"""
@@ -317,16 +363,20 @@ class FirebaseClient:
             return {}
 
     def _get_active_users(self):
-        """Get list of active users"""
+        """Get all active users from Firestore"""
         try:
-            # Get users from Slack channel
-            from app import slack_bot
-            channel_members = slack_bot.get_channel_members(Config.SLACK_CHANNEL)
-            return channel_members
+            # Query users collection for active users
+            users_ref = self.db.collection('users')
+            active_users = users_ref.where('status', '==', 'active').stream()
+            
+            # Extract user IDs
+            user_ids = [doc.get('slack_id') for doc in active_users 
+                       if doc.get('slack_id')]  # Only include users with Slack IDs
+            
+            return user_ids
             
         except Exception as e:
             logger.error(f"Error getting active users: {str(e)}")
-            logger.error(traceback.format_exc())
             return []
 
     def get_reports_for_date_range(self, start_date, end_date):
@@ -347,4 +397,127 @@ class FirebaseClient:
             return reports
         except Exception as e:
             logger.error(f"Error getting reports for date range: {str(e)}")
+            return []
+
+    def add_user(self, user_data):
+        """Add or update a user in Firebase"""
+        if not self.db:
+            logger.error("Firebase client not initialized")
+            return False
+        
+        try:
+            # Check if user already exists
+            slack_id = user_data.get('slack_id')
+            if not slack_id:
+                logger.error("Cannot add user without slack_id")
+                return False
+            
+            # Find user by slack_id
+            users = self.db.collection('users').where('slack_id', '==', slack_id).limit(1).stream()
+            user_doc = None
+            for doc in users:
+                user_doc = doc
+                break
+            
+            if user_doc:
+                # Update existing user
+                user_doc.reference.update(user_data)
+                logger.info(f"Updated existing user: {slack_id} ({user_data.get('name')})")
+            else:
+                # Add new user
+                self.db.collection('users').add(user_data)
+                logger.info(f"Added new user: {slack_id} ({user_data.get('name')})")
+            
+            return True
+        except Exception as e:
+            logger.error(f"Error adding/updating user: {str(e)}")
+            return False
+
+    def update_user_status(self, slack_id, status):
+        """Update a user's active status"""
+        if not self.db:
+            logger.error("Firebase client not initialized")
+            return False
+        
+        try:
+            # Find user by slack_id
+            users = self.db.collection('users').where('slack_id', '==', slack_id).limit(1).stream()
+            user_doc = None
+            for doc in users:
+                user_doc = doc
+                break
+            
+            if not user_doc:
+                logger.warning(f"User with slack_id {slack_id} not found")
+                return False
+            
+            # Update status
+            user_doc.reference.update({
+                'status': status,
+                'updated_at': datetime.now(ZoneInfo("UTC"))
+            })
+            
+            logger.info(f"Updated user {slack_id} status to {status}")
+            return True
+        except Exception as e:
+            logger.error(f"Error updating user status: {str(e)}")
+            return False
+
+    def get_all_users(self):
+        """Get all users from Firebase"""
+        try:
+            users = []
+            # Remove the status filter to get ALL users
+            docs = self.db.collection('users').stream()
+            for doc in docs:
+                user_data = doc.to_dict()
+                user_data['id'] = doc.id  # Add document ID to the data
+                users.append(user_data)
+                logger.info(f"Found user in Firebase: {user_data}")
+            return users
+        except Exception as e:
+            logger.error(f"Error getting users from Firebase: {str(e)}")
+            return []
+
+    def get_missed_submissions_for_user(self, user_id, start_date, end_date):
+        """Get missed submissions for a specific user within a date range"""
+        try:
+            # Convert dates to strings for comparison
+            start_date_str = start_date.strftime('%Y-%m-%d')
+            end_date_str = end_date.strftime('%Y-%m-%d')
+            
+            # Get all dates in the range
+            all_dates = []
+            current_date = start_date
+            while current_date <= end_date:
+                # Skip weekends
+                if current_date.weekday() < 5:  # 0-4 are weekdays
+                    all_dates.append(current_date)
+                current_date += timedelta(days=1)
+            
+            # Get all submissions for this user in the date range
+            submitted_dates = set()
+            
+            # Query for all submissions by this user in the date range
+            submissions_query = self.db.collection('eod_reports').where('user_id', '==', user_id)
+            submissions = submissions_query.stream()
+            
+            for doc in submissions:
+                data = doc.to_dict()
+                submission_date_str = data.get('date')
+                
+                if submission_date_str and start_date_str <= submission_date_str <= end_date_str:
+                    try:
+                        submission_date = datetime.strptime(submission_date_str, '%Y-%m-%d').date()
+                        submitted_dates.add(submission_date)
+                    except ValueError:
+                        pass
+            
+            # Calculate missed dates
+            missed_dates = [date for date in all_dates if date not in submitted_dates]
+            
+            return missed_dates
+            
+        except Exception as e:
+            logger.error(f"Error getting missed submissions for user {user_id}: {str(e)}")
             return []
