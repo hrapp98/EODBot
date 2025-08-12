@@ -174,30 +174,17 @@ class SheetsClient:
             return
 
         try:
-            # Special handling for the two Reys
-            rey_id_mapping = {
-                "U08KYLRC8KT": "Rey Cucio",  # Rey 1
-            }
-
             user_id = report_data.get('user_id')
 
             # Get user info from Slack
             try:
-                # Check if this is one of the Reys first
-                if user_id in rey_id_mapping:
-                    user_name = rey_id_mapping[user_id]
-                    user_email = f"{user_name.lower().replace(' ', '.')}@example.com"  # Generate email from name
-                    logger.info(
-                        f"Using mapped name for Rey: {user_name} for user_id: {user_id}"
-                    )
-                else:
-                    from slack_client import SlackClient
-                    slack_client = SlackClient(Config.SLACK_BOT_OAUTH_TOKEN)
-                    user_info = slack_client.get_user_info(user_id)
-                    user_name = user_info.get(
-                        'real_name', 'Unknown') if user_info else 'Unknown'
-                    user_email = user_info.get('profile', {}).get(
-                        'email', 'Unknown') if user_info else 'Unknown'
+                from slack_client import SlackClient
+                slack_client = SlackClient(Config.SLACK_BOT_OAUTH_TOKEN)
+                user_info = slack_client.get_user_info(user_id)
+                user_name = user_info.get(
+                    'real_name', 'Unknown') if user_info else 'Unknown'
+                user_email = user_info.get('profile', {}).get(
+                    'email', 'Unknown') if user_info else 'Unknown'
             except Exception as e:
                 logger.error(f"Error getting Slack user info: {str(e)}")
                 user_name = 'Unknown'
@@ -380,28 +367,15 @@ class SheetsClient:
             return
 
         try:
-            # Special handling for the two Reys
-            rey_id_mapping = {
-                "U08KYLRC8KT": "Rey Cucio",  # Rey 1
-            }
-
             # Get user info from Slack
             try:
-                # Check if this is one of the Reys first
-                if user_id in rey_id_mapping:
-                    user_name = rey_id_mapping[user_id]
-                    user_email = f"{user_name.lower().replace(' ', '.')}@example.com"  # Generate email from name
-                    logger.info(
-                        f"Using mapped name for Rey: {user_name} for user_id: {user_id}"
-                    )
-                else:
-                    from slack_client import SlackClient
-                    slack_client = SlackClient(Config.SLACK_BOT_OAUTH_TOKEN)
-                    user_info = slack_client.get_user_info(user_id)
-                    user_name = user_info.get(
-                        'real_name', 'Unknown') if user_info else 'Unknown'
-                    user_email = user_info.get('profile', {}).get(
-                        'email', 'Unknown') if user_info else 'Unknown'
+                from slack_client import SlackClient
+                slack_client = SlackClient(Config.SLACK_BOT_OAUTH_TOKEN)
+                user_info = slack_client.get_user_info(user_id)
+                user_name = user_info.get(
+                    'real_name', 'Unknown') if user_info else 'Unknown'
+                user_email = user_info.get('profile', {}).get(
+                    'email', 'Unknown') if user_info else 'Unknown'
             except Exception as e:
                 logger.error(f"Error getting Slack user info: {str(e)}")
                 user_name = 'Unknown'
@@ -461,10 +435,7 @@ class SheetsClient:
             # Track user IDs to filter out bots and deactivated users
             user_id_to_name = {}
 
-            # Special handling for the two Reys
-            rey_id_mapping = {
-                "U08KYLRC8KT": "Rey Cucio",  # Rey 1
-            }
+
 
             logger.info("Processing submission data")
             submission_count = 0
@@ -506,35 +477,28 @@ class SheetsClient:
 
                 # Get user name and check if bot or deactivated
                 try:
-                    # Special handling for the two Reys
-                    if user_id in rey_id_mapping:
-                        user_name = rey_id_mapping[user_id]
+                    from slack_client import SlackClient
+                    slack_client = SlackClient(
+                        Config.SLACK_BOT_OAUTH_TOKEN)
+                    user_info = slack_client.get_user_info(user_id)
+
+                    # Skip if user is a bot
+                    if user_info and user_info.get('is_bot', False):
+                        logger.info(f"Skipping bot user: {user_id}")
+                        continue
+
+                    # Skip if user is deactivated
+                    if user_info and user_info.get('deleted', False):
                         logger.info(
-                            f"Using mapped name for Rey: {user_name} for user_id: {user_id}"
-                        )
-                    else:
-                        from slack_client import SlackClient
-                        slack_client = SlackClient(
-                            Config.SLACK_BOT_OAUTH_TOKEN)
-                        user_info = slack_client.get_user_info(user_id)
+                            f"Skipping deactivated user: {user_id}")
+                        continue
 
-                        # Skip if user is a bot
-                        if user_info and user_info.get('is_bot', False):
-                            logger.info(f"Skipping bot user: {user_id}")
-                            continue
-
-                        # Skip if user is deactivated
-                        if user_info and user_info.get('deleted', False):
-                            logger.info(
-                                f"Skipping deactivated user: {user_id}")
-                            continue
-
-                        user_name = user_info.get(
-                            'real_name', 'Unknown') if user_info else data.get(
-                                'user_name', 'Unknown')
-                        logger.info(
-                            f"Retrieved user name: {user_name} for user_id: {user_id}"
-                        )
+                    user_name = user_info.get(
+                        'real_name', 'Unknown') if user_info else data.get(
+                            'user_name', 'Unknown')
+                    logger.info(
+                        f"Retrieved user name: {user_name} for user_id: {user_id}"
+                    )
 
                     # Store user ID to name mapping
                     user_id_to_name[user_id] = user_name

@@ -429,10 +429,7 @@ def send_daily_non_submission_report(app):
             ]
             logger.info(f"Will exclude internal team members and Slackbot: {INTERNAL_TEAM_IDS}")
             
-            # Special handling for the two Reys
-            rey_id_mapping = {
-                "U08KYLRC8KT": "Rey Cucio",     # Rey 1
-            }
+
             
             # Get all users who have ever submitted an EOD report
             all_users = set()
@@ -458,13 +455,7 @@ def send_daily_non_submission_report(app):
                         logger.info(f"Skipping Slackbot user: {user_id}")
                         continue
                     
-                    # Special handling for the two Reys
-                    if user_id in rey_id_mapping:
-                        user_name = rey_id_mapping[user_id]
-                        user_names[user_id] = user_name
-                        valid_users.add(user_id)
-                        logger.info(f"Using mapped name for Rey: {user_name} (ID: {user_id})")
-                        continue
+
                         
                     user_info = slack_bot.client.users_info(user=user_id)
                     
