@@ -134,7 +134,7 @@ class SlackBot:
 *EOD Bot Help*
 • Submit your EOD report by typing "eod report"
 • Format your submission as shown in the prompt
-• Reports are due by 5 PM daily
+• Reports are due by 11:59 PM EST daily
 • Use "status" to check your submission status
             """
             self.client.chat_postMessage(

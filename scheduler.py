@@ -62,10 +62,10 @@ def setup_scheduler(app):
         id='last_call_reminders'
     )
     
-    # Send management report at 8:00 PM ET
+    # Send management report at 12:01 AM ET (after 11:59 PM cutoff)
     scheduler.add_job(
         send_daily_non_submission_report,
-        CronTrigger(hour=20, minute=0, timezone="America/New_York"),
+        CronTrigger(hour=0, minute=1, timezone="America/New_York"),
         args=[app],
         id='daily_non_submission_report'
     )
@@ -78,10 +78,10 @@ def setup_scheduler(app):
         id='weekly_summary'
     )
     
-    # Update Google Sheets tracker daily at 9:00 PM ET
+    # Update Google Sheets tracker daily at 12:05 AM ET (after 11:59 PM cutoff)
     scheduler.add_job(
         update_sheets_tracker,
-        CronTrigger(hour=21, minute=0, timezone="America/New_York"),
+        CronTrigger(hour=0, minute=5, timezone="America/New_York"),
         args=[app],
         id='update_sheets_tracker'
     )
