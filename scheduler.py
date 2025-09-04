@@ -127,11 +127,12 @@ def send_eod_prompts(app):
             start_utc = start.astimezone(ZoneInfo("UTC"))
             end_utc = end.astimezone(ZoneInfo("UTC"))
             
-            # Get users who have submitted today
+            # Get users who have submitted today using the date field
             submitted_users = set()
             try:
-                # Query for today's submissions
-                today_docs = firebase_client.db.collection('eod_reports').where('timestamp', '>=', start_utc).where('timestamp', '<=', end_utc).stream()
+                today_date_str = today.strftime('%Y-%m-%d')
+                # Query for today's submissions using date field
+                today_docs = firebase_client.db.collection('eod_reports').where('date', '==', today_date_str).stream()
                 
                 # Process each document
                 for doc in today_docs:
@@ -431,18 +432,29 @@ def send_daily_non_submission_report(app):
             
 
             
-            # Get all users who have ever submitted an EOD report
+            # Get all active users from the users collection who have submitted at least one EOD report
             all_users = set()
-            all_docs = list(firebase_client.db.collection('eod_reports').stream())
-            logger.info(f"Found {len(all_docs)} total EOD reports in the database")
+            users_docs = list(firebase_client.db.collection('users').where('status', '==', 'active').stream())
+            logger.info(f"Found {len(users_docs)} active users in the database")
             
-            for doc in all_docs:
-                doc_data = doc.to_dict()
-                user_id = doc_data.get('user_id')
-                if user_id and user_id not in INTERNAL_TEAM_IDS:  # Exclude internal team and Slackbot
+            # Get all users who have ever submitted an EOD report
+            eod_submitters = set()
+            eod_docs = firebase_client.db.collection('eod_reports').select(['user_id']).stream()
+            for doc in eod_docs:
+                data = doc.to_dict()
+                user_id = data.get('user_id')
+                if user_id:
+                    eod_submitters.add(user_id)
+            
+            logger.info(f"Found {len(eod_submitters)} users who have submitted EOD reports")
+            
+            for doc in users_docs:
+                user_data = doc.to_dict()
+                user_id = user_data.get('slack_id')
+                if user_id and user_id not in INTERNAL_TEAM_IDS and user_id in eod_submitters:  # Only include users who have submitted EODs
                     all_users.add(user_id)
             
-            logger.info(f"Found {len(all_users)} unique users who have submitted EOD reports (excluding internal team and Slackbot)")
+            logger.info(f"Found {len(all_users)} active users who should submit EOD reports (excluding internal team and Slackbot)")
             
             # Get user names from Slack and filter out bots and deactivated accounts
             user_names = {}
@@ -482,74 +494,82 @@ def send_daily_non_submission_report(app):
                     logger.error(f"Error getting user info: {str(e)}")
                     # Skip users we can't get info for - they might be invalid
             
-            logger.info(f"Found {len(valid_users)} valid human users (non-bot, non-deactivated, non-internal, non-Slackbot)")
+            logger.info(f"Found {len(valid_users)} valid active users (non-bot, non-deactivated, non-internal, non-Slackbot)")
             
-            # Define today's date range in UTC (since Firebase stores in UTC)
-            today_start_ny = datetime.combine(today, datetime.min.time()).replace(tzinfo=ZoneInfo("America/New_York"))
-            today_end_ny = datetime.combine(today, datetime.max.time()).replace(tzinfo=ZoneInfo("America/New_York"))
-            
-            # Convert to UTC for Firebase query
-            today_start_utc = today_start_ny.astimezone(ZoneInfo("UTC"))
-            today_end_utc = today_end_ny.astimezone(ZoneInfo("UTC"))
-            
-            logger.info(f"Filtering for submissions between {today_start_utc} and {today_end_utc} (UTC)")
+            # Use the date field instead of timestamp ranges for more reliable querying
+            today_date_str = today.strftime('%Y-%m-%d')
+            logger.info(f"Looking for submissions with date field: {today_date_str}")
             
             # Initialize empty set for submitted users
             submitted_today = set()
             
-            # Query specifically for today's submissions in UTC
-            today_docs = firebase_client.db.collection('eod_reports').where('timestamp', '>=', today_start_utc).where('timestamp', '<=', today_end_utc).stream()
+            # Query specifically for today's submissions using the date field
+            today_docs = firebase_client.db.collection('eod_reports').where('date', '==', today_date_str).stream()
             
             # Process each document from today's query
+            logger.info(f"=== PROCESSING TODAY'S SUBMISSIONS FOR DATE {today_date_str} ===")
             for doc in today_docs:
                 doc_data = doc.to_dict()
                 doc_id = doc.id
                 user_id = doc_data.get('user_id', 'No user ID')
                 timestamp = doc_data.get('timestamp')
+                date_field = doc_data.get('date')
                 
                 if not timestamp:
                     logger.warning(f"Document {doc_id} has no timestamp, skipping")
                     continue
                 
                 user_name = user_names.get(user_id, f"Unknown ({user_id})")
-                logger.info(f"Today's submission: {user_name} (ID: {user_id}) at {timestamp}")
+                logger.info(f"✅ FOUND SUBMISSION: {user_name} (ID: {user_id})")
+                logger.info(f"   - Timestamp: {timestamp}")
+                logger.info(f"   - Date field: {date_field}")
+                logger.info(f"   - Document ID: {doc_id}")
                 submitted_today.add(user_id)
             
             logger.info(f"Found {len(submitted_today)} users who submitted today")
+            logger.info(f"Users who submitted: {list(submitted_today)}")
             
             # Calculate missing users
             missing_users = [user_id for user_id in valid_users if user_id not in submitted_today]
             logger.info(f"Missing users count: {len(missing_users)} out of {len(valid_users)} total valid users")
+            logger.info(f"Valid users list: {list(valid_users)}")
+            logger.info(f"Missing users list: {missing_users}")
             
             # Get past submissions to calculate consecutive missed days
             past_submissions = {}
             
-            # Get submissions from the past 30 days
+            # Get submissions from the past 30 days using date field
             thirty_days_ago = today - timedelta(days=30)
-            thirty_days_ago_start = datetime.combine(thirty_days_ago, datetime.min.time()).replace(tzinfo=ZoneInfo("America/New_York"))
-            thirty_days_ago_start_utc = thirty_days_ago_start.astimezone(ZoneInfo("UTC"))
+            logger.info(f"Getting past submissions from {thirty_days_ago} to {today}")
             
-            past_docs = firebase_client.db.collection('eod_reports').where('timestamp', '>=', thirty_days_ago_start_utc).stream()
+            # Get all submissions and filter by date field
+            all_past_docs = firebase_client.db.collection('eod_reports').stream()
             
-            for doc in past_docs:
+            for doc in all_past_docs:
                 doc_data = doc.to_dict()
                 user_id = doc_data.get('user_id')
-                timestamp = doc_data.get('timestamp')
+                date_str = doc_data.get('date')
                 
-                if not user_id or not timestamp:
+                if not user_id or not date_str:
                     continue
                 
                 # Skip internal team
                 if user_id in INTERNAL_TEAM_IDS:
                     continue
                 
-                # Convert timestamp to NY date
-                submission_date = timestamp.astimezone(ZoneInfo("America/New_York")).date()
-                
-                if user_id not in past_submissions:
-                    past_submissions[user_id] = set()
-                
-                past_submissions[user_id].add(submission_date)
+                try:
+                    # Parse the date string
+                    submission_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                    
+                    # Only include dates within our range
+                    if thirty_days_ago <= submission_date <= today:
+                        if user_id not in past_submissions:
+                            past_submissions[user_id] = set()
+                        
+                        past_submissions[user_id].add(submission_date)
+                except ValueError:
+                    logger.warning(f"Invalid date format in document {doc.id}: {date_str}")
+                    continue
             
             # Now calculate consecutive missed days for each missing user
             consecutive_missed_days = {}
@@ -671,8 +691,16 @@ def update_tracker_with_test_data(app):
                 logger.info(f"TODAY'S DATE: {today} (America/New_York timezone)")
                 
                 # CRITICAL: Get all active users first
-                all_users = firebase_client.get_all_users()
-                logger.info(f"TOTAL USERS IN SYSTEM: {len(all_users)}")
+                all_users_data = firebase_client.get_all_users()
+                logger.info(f"TOTAL USERS IN SYSTEM: {len(all_users_data)}")
+                
+                # Filter to only active users and extract slack_ids
+                all_users = set()
+                for user in all_users_data:
+                    if user.get('status') == 'active' and user.get('slack_id'):
+                        all_users.add(user.get('slack_id'))
+                
+                logger.info(f"ACTIVE USERS: {len(all_users)}")
                 
                 # Create a dictionary to store user names
                 user_names = {}

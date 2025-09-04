@@ -149,6 +149,9 @@ class SlackBot:
         # Ensure all required fields are present
         required_fields = [
             'user_id',
+            'time_in',
+            'time_out',
+            'full_shift',
             'short_term_projects',
             'long_term_projects',
             'blockers',
@@ -159,12 +162,30 @@ class SlackBot:
         ]
         
         for field in required_fields:
-            if not report_data.get(field):
-                raise ValueError(f"Missing required field: {field}")
+            if field not in report_data:
+                # For backwards compatibility, only require new fields if they exist
+                if field in ['time_in', 'time_out', 'full_shift']:
+                    report_data[field] = 'Not specified'
+                elif field == 'reason':
+                    report_data[field] = ''
+                else:
+                    raise ValueError(f"Missing required field: {field}")
+        
+        # Build shift info string
+        shift_info = f"*Time In:* {report_data.get('time_in', 'Not specified')} | *Time Out:* {report_data.get('time_out', 'Not specified')}"
+        full_shift_text = "Yes" if report_data.get('full_shift') == 'yes' else "No"
+        shift_info += f" | *Full Shift:* {full_shift_text}"
+        
+        # Add reason if full shift was not completed
+        if report_data.get('full_shift') == 'no' and report_data.get('reason'):
+            shift_info += f"\n*Reason:* {report_data['reason']}"
         
         # Format the report with all fields
         return f"""
         *EOD Report from <@{report_data['user_id']}>*
+        
+        {shift_info}
+        
         *Short-term Projects:*
         {report_data['short_term_projects']}
 
@@ -260,7 +281,82 @@ class SlackBot:
     
     def _build_eod_modal(self, private_metadata=None, existing_data=None):
         """Build EOD report modal view"""
+        
+        # Generate time options in 30-minute intervals
+        time_options = []
+        for hour in range(24):
+            for minute in [0, 30]:
+                time_str = f"{hour:02d}:{minute:02d}"
+                time_options.append({
+                    "text": {"type": "plain_text", "text": time_str},
+                    "value": time_str
+                })
+        
         blocks = [
+            # Time In field
+            {
+                "type": "input",
+                "block_id": "time_in_block",
+                "label": {"type": "plain_text", "text": "Time In (HH:MM)"},
+                "element": {
+                    "type": "static_select",
+                    "action_id": "time_in_input",
+                    "placeholder": {"type": "plain_text", "text": "Select time in"},
+                    "options": time_options,
+                    "initial_option": {"text": {"type": "plain_text", "text": existing_data.get('time_in', '09:00') if existing_data else '09:00'}, "value": existing_data.get('time_in', '09:00') if existing_data else '09:00'}
+                }
+            },
+            # Time Out field
+            {
+                "type": "input",
+                "block_id": "time_out_block",
+                "label": {"type": "plain_text", "text": "Time Out (HH:MM)"},
+                "element": {
+                    "type": "static_select",
+                    "action_id": "time_out_input",
+                    "placeholder": {"type": "plain_text", "text": "Select time out"},
+                    "options": time_options,
+                    "initial_option": {"text": {"type": "plain_text", "text": existing_data.get('time_out', '17:00') if existing_data else '17:00'}, "value": existing_data.get('time_out', '17:00') if existing_data else '17:00'}
+                }
+            },
+            # Full Shift field
+            {
+                "type": "input",
+                "block_id": "full_shift_block",
+                "label": {"type": "plain_text", "text": "Full Shift Completed?"},
+                "element": {
+                    "type": "radio_buttons",
+                    "action_id": "full_shift_input",
+                    "options": [
+                        {
+                            "text": {"type": "plain_text", "text": "Yes"},
+                            "value": "yes"
+                        },
+                        {
+                            "text": {"type": "plain_text", "text": "No"},
+                            "value": "no"
+                        }
+                    ],
+                    "initial_option": {
+                        "text": {"type": "plain_text", "text": "Yes" if existing_data and existing_data.get('full_shift') == 'yes' else "Yes"},
+                        "value": "yes" if not existing_data or existing_data.get('full_shift') == 'yes' else "no"
+                    }
+                }
+            },
+            # Reason field (optional, shown when full shift is No)
+            {
+                "type": "input",
+                "block_id": "reason_block",
+                "label": {"type": "plain_text", "text": "Reason (if not full shift)"},
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": "reason_input",
+                    "multiline": True,
+                    "initial_value": existing_data.get('reason', '') if existing_data else '',
+                    "placeholder": {"type": "plain_text", "text": "Please explain why you didn't complete a full shift"}
+                },
+                "optional": True
+            },
             {
                 "type": "input",
                 "block_id": "short_term_block",

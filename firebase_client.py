@@ -81,6 +81,9 @@ class FirebaseClient:
         try:
             # All fields are required
             required_fields = {
+                'time_in',
+                'time_out',
+                'full_shift',
                 'short_term_projects',
                 'long_term_projects',
                 'blockers',
@@ -108,9 +111,19 @@ class FirebaseClient:
                 report_data['user_email'] = 'Unknown'
             
             # Add timestamp and user_id
-            report_data['timestamp'] = datetime.now(tz=ZoneInfo("UTC"))
+            utc_timestamp = datetime.now(tz=ZoneInfo("UTC"))
+            ny_timestamp = utc_timestamp.astimezone(ZoneInfo("America/New_York"))
+            
+            report_data['timestamp'] = utc_timestamp
             report_data['user_id'] = user_id
-            report_data['date'] = report_data['timestamp'].strftime('%Y-%m-%d')
+            report_data['date'] = ny_timestamp.strftime('%Y-%m-%d')  # Use NY timezone for date
+            
+            # Enhanced logging for debugging
+            logger.info(f"💾 SAVING EOD REPORT:")
+            logger.info(f"   - User ID: {user_id}")
+            logger.info(f"   - UTC Timestamp: {utc_timestamp}")
+            logger.info(f"   - NY Timestamp: {ny_timestamp}")
+            logger.info(f"   - Date field: {report_data['date']}")
             
             # Save to Firestore
             doc_ref = self.db.collection('eod_reports').document()
@@ -266,10 +279,12 @@ class FirebaseClient:
             raise RuntimeError("Firebase client not initialized")
         
         try:
-            # Use EST timezone for consistency
-            now = datetime.now(ZoneInfo("America/New_York"))
-            report_data['timestamp'] = now  # Update timestamp
-            report_data['date'] = now.date().isoformat()  # Update date
+            # Use consistent timezone handling
+            utc_timestamp = datetime.now(ZoneInfo("UTC"))
+            ny_timestamp = utc_timestamp.astimezone(ZoneInfo("America/New_York"))
+            
+            report_data['timestamp'] = utc_timestamp  # Store in UTC
+            report_data['date'] = ny_timestamp.strftime('%Y-%m-%d')  # Use NY timezone for date
             
             # Get user info from Slack if not already present
             if 'user_name' not in report_data or 'user_email' not in report_data:

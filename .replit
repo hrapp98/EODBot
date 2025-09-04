@@ -37,3 +37,8 @@ run = ["sh", "-c", "PORT=3000 python app.py"]
 [[ports]]
 localPort = 3000
 externalPort = 80
+
+[[ports]]
+localPort = 45389
+externalPort = 3000
+exposeLocalhost = true
