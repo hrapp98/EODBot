@@ -303,15 +303,14 @@ class SlackBot:
         """Build EOD report modal view"""
         
         # Generate time options in 12-hour format with 30-minute intervals
-        time_options_12hr = []
-        time_options_24hr = []
+        time_options = []
         
         for hour in range(24):
             for minute in [0, 30]:
-                # 24-hour format
+                # Store in 24-hour format
                 time_24hr = f"{hour:02d}:{minute:02d}"
                 
-                # 12-hour format
+                # Display in 12-hour format
                 if hour == 0:
                     hour_12 = 12
                     period = "AM"
@@ -327,45 +326,16 @@ class SlackBot:
                 
                 time_12hr = f"{hour_12}:{minute:02d} {period}"
                 
-                time_options_12hr.append({
+                time_options.append({
                     "text": {"type": "plain_text", "text": time_12hr},
                     "value": time_24hr  # Store in 24hr format internally
                 })
-                
-                time_options_24hr.append({
-                    "text": {"type": "plain_text", "text": time_24hr},
-                    "value": time_24hr
-                })
-        
-        # Check if user prefers 24-hour format (default to 12-hour)
-        use_24hr = existing_data.get('use_24hr_format', False) if existing_data else False
-        time_options = time_options_24hr if use_24hr else time_options_12hr
         
         # Convert existing time values to display format
         default_time_in = existing_data.get('time_in', '09:00') if existing_data else '09:00'
         default_time_out = existing_data.get('time_out', '17:00') if existing_data else '17:00'
         
         blocks = [
-            # Time format toggle
-            {
-                "type": "section",
-                "block_id": "time_format_block",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": "*Time Entry Format*"
-                },
-                "accessory": {
-                    "type": "checkboxes",
-                    "action_id": "time_format_input",
-                    "options": [
-                        {
-                            "text": {"type": "plain_text", "text": "Use 24-hour format"},
-                            "value": "24hr"
-                        }
-                    ],
-                    "initial_options": [{"text": {"type": "plain_text", "text": "Use 24-hour format"}, "value": "24hr"}] if use_24hr else []
-                }
-            },
             # Time In field
             {
                 "type": "input",

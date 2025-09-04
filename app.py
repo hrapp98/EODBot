@@ -428,16 +428,11 @@ def slack_interactivity():
                 # Extract values from the submission
                 values = payload['view']['state']['values']
                 
-                # Check if 24-hour format was selected
-                time_format_selected = values.get('time_format_block', {}).get('time_format_input', {}).get('selected_options', [])
-                use_24hr_format = len(time_format_selected) > 0 and time_format_selected[0].get('value') == '24hr'
-                
                 report_data = {
                     'time_in': values['time_in_block']['time_in_input']['selected_option']['value'],
                     'time_out': values['time_out_block']['time_out_input']['selected_option']['value'],
                     'full_shift': values['full_shift_block']['full_shift_input']['selected_option']['value'],
                     'reason': values.get('reason_block', {}).get('reason_input', {}).get('value', ''),
-                    'use_24hr_format': use_24hr_format,  # Store format preference
                     'short_term_projects': values['short_term_block']['short_term_input']['value'],
                     'long_term_projects': values['long_term_block']['long_term_input']['value'],
                     'blockers': values['blockers_block']['blockers_input']['value'],
