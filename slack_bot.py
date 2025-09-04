@@ -171,8 +171,28 @@ class SlackBot:
                 else:
                     raise ValueError(f"Missing required field: {field}")
         
+        # Convert time format for display (24hr stored format to 12hr display)
+        def convert_to_12hr(time_24hr):
+            if not time_24hr or time_24hr == 'Not specified':
+                return 'Not specified'
+            try:
+                hour, minute = map(int, time_24hr.split(':'))
+                if hour == 0:
+                    return f"12:{minute:02d} AM"
+                elif hour < 12:
+                    return f"{hour}:{minute:02d} AM"
+                elif hour == 12:
+                    return f"12:{minute:02d} PM"
+                else:
+                    return f"{hour-12}:{minute:02d} PM"
+            except:
+                return time_24hr
+        
+        time_in_display = convert_to_12hr(report_data.get('time_in', 'Not specified'))
+        time_out_display = convert_to_12hr(report_data.get('time_out', 'Not specified'))
+        
         # Build shift info string
-        shift_info = f"*Time In:* {report_data.get('time_in', 'Not specified')} | *Time Out:* {report_data.get('time_out', 'Not specified')}"
+        shift_info = f"*Time In:* {time_in_display} EST | *Time Out:* {time_out_display} EST"
         full_shift_text = "Yes" if report_data.get('full_shift') == 'yes' else "No"
         shift_info += f" | *Full Shift:* {full_shift_text}"
         
@@ -282,41 +302,94 @@ class SlackBot:
     def _build_eod_modal(self, private_metadata=None, existing_data=None):
         """Build EOD report modal view"""
         
-        # Generate time options in 30-minute intervals
-        time_options = []
+        # Generate time options in 12-hour format with 30-minute intervals
+        time_options_12hr = []
+        time_options_24hr = []
+        
         for hour in range(24):
             for minute in [0, 30]:
-                time_str = f"{hour:02d}:{minute:02d}"
-                time_options.append({
-                    "text": {"type": "plain_text", "text": time_str},
-                    "value": time_str
+                # 24-hour format
+                time_24hr = f"{hour:02d}:{minute:02d}"
+                
+                # 12-hour format
+                if hour == 0:
+                    hour_12 = 12
+                    period = "AM"
+                elif hour < 12:
+                    hour_12 = hour
+                    period = "AM"
+                elif hour == 12:
+                    hour_12 = 12
+                    period = "PM"
+                else:
+                    hour_12 = hour - 12
+                    period = "PM"
+                
+                time_12hr = f"{hour_12}:{minute:02d} {period}"
+                
+                time_options_12hr.append({
+                    "text": {"type": "plain_text", "text": time_12hr},
+                    "value": time_24hr  # Store in 24hr format internally
+                })
+                
+                time_options_24hr.append({
+                    "text": {"type": "plain_text", "text": time_24hr},
+                    "value": time_24hr
                 })
         
+        # Check if user prefers 24-hour format (default to 12-hour)
+        use_24hr = existing_data.get('use_24hr_format', False) if existing_data else False
+        time_options = time_options_24hr if use_24hr else time_options_12hr
+        
+        # Convert existing time values to display format
+        default_time_in = existing_data.get('time_in', '09:00') if existing_data else '09:00'
+        default_time_out = existing_data.get('time_out', '17:00') if existing_data else '17:00'
+        
         blocks = [
+            # Time format toggle
+            {
+                "type": "section",
+                "block_id": "time_format_block",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": "*Time Entry Format*"
+                },
+                "accessory": {
+                    "type": "checkboxes",
+                    "action_id": "time_format_input",
+                    "options": [
+                        {
+                            "text": {"type": "plain_text", "text": "Use 24-hour format"},
+                            "value": "24hr"
+                        }
+                    ],
+                    "initial_options": [{"text": {"type": "plain_text", "text": "Use 24-hour format"}, "value": "24hr"}] if use_24hr else []
+                }
+            },
             # Time In field
             {
                 "type": "input",
                 "block_id": "time_in_block",
-                "label": {"type": "plain_text", "text": "Time In (HH:MM)"},
+                "label": {"type": "plain_text", "text": "Time In (EST)"},
                 "element": {
                     "type": "static_select",
                     "action_id": "time_in_input",
                     "placeholder": {"type": "plain_text", "text": "Select time in"},
                     "options": time_options,
-                    "initial_option": {"text": {"type": "plain_text", "text": existing_data.get('time_in', '09:00') if existing_data else '09:00'}, "value": existing_data.get('time_in', '09:00') if existing_data else '09:00'}
+                    "initial_option": next((opt for opt in time_options if opt["value"] == default_time_in), time_options[18])  # Default to 9:00 AM
                 }
             },
             # Time Out field
             {
                 "type": "input",
                 "block_id": "time_out_block",
-                "label": {"type": "plain_text", "text": "Time Out (HH:MM)"},
+                "label": {"type": "plain_text", "text": "Time Out (EST)"},
                 "element": {
                     "type": "static_select",
                     "action_id": "time_out_input",
                     "placeholder": {"type": "plain_text", "text": "Select time out"},
                     "options": time_options,
-                    "initial_option": {"text": {"type": "plain_text", "text": existing_data.get('time_out', '17:00') if existing_data else '17:00'}, "value": existing_data.get('time_out', '17:00') if existing_data else '17:00'}
+                    "initial_option": next((opt for opt in time_options if opt["value"] == default_time_out), time_options[34])  # Default to 5:00 PM
                 }
             },
             # Full Shift field
@@ -343,19 +416,36 @@ class SlackBot:
                     }
                 }
             },
-            # Reason field (optional, shown when full shift is No)
+            # Divider for visual separation
+            {
+                "type": "divider"
+            },
+            # Contextual instruction for reason field
+            {
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "mrkdwn",
+                        "text": "_If you answered 'No' to full shift, please provide a reason below:_"
+                    }
+                ]
+            },
+            # Reason field (optional, only needed when full shift is No)
             {
                 "type": "input",
                 "block_id": "reason_block",
-                "label": {"type": "plain_text", "text": "Reason (if not full shift)"},
+                "label": {"type": "plain_text", "text": "Reason for Incomplete Shift"},
                 "element": {
                     "type": "plain_text_input",
                     "action_id": "reason_input",
                     "multiline": True,
                     "initial_value": existing_data.get('reason', '') if existing_data else '',
-                    "placeholder": {"type": "plain_text", "text": "Please explain why you didn't complete a full shift"}
+                    "placeholder": {"type": "plain_text", "text": "Only required if you selected 'No' for full shift (e.g., doctor's appointment, early departure, etc.)"}
                 },
                 "optional": True
+            },
+            {
+                "type": "divider"
             },
             {
                 "type": "input",
