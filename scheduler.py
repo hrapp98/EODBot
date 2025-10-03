@@ -412,13 +412,17 @@ def send_daily_non_submission_report(app):
             
             # Skip weekends
             now = datetime.now(ZoneInfo("America/New_York"))
-            if now.weekday() >= 5:  # Saturday = 5, Sunday = 6
-                logger.info("Skipping non-submission report for weekend")
+            
+            # Get yesterday's date (the day that just ended at midnight)
+            # Report runs at 12:01 AM, so we check the previous day's submissions
+            yesterday = (now - timedelta(days=1)).date()
+            
+            # Skip if yesterday was a weekend
+            if yesterday.weekday() >= 5:  # Saturday = 5, Sunday = 6
+                logger.info(f"Skipping non-submission report - yesterday ({yesterday}) was a weekend")
                 return
             
-            # Get today's date
-            today = now.date()
-            logger.info(f"Generating non-submission report for date: {today}")
+            logger.info(f"Generating non-submission report for date: {yesterday}")
             
             # Define internal team user IDs to exclude
             INTERNAL_TEAM_IDS = [
@@ -497,18 +501,18 @@ def send_daily_non_submission_report(app):
             logger.info(f"Found {len(valid_users)} valid active users (non-bot, non-deactivated, non-internal, non-Slackbot)")
             
             # Use the date field instead of timestamp ranges for more reliable querying
-            today_date_str = today.strftime('%Y-%m-%d')
-            logger.info(f"Looking for submissions with date field: {today_date_str}")
+            yesterday_date_str = yesterday.strftime('%Y-%m-%d')
+            logger.info(f"Looking for submissions with date field: {yesterday_date_str}")
             
             # Initialize empty set for submitted users
-            submitted_today = set()
+            submitted_yesterday = set()
             
-            # Query specifically for today's submissions using the date field
-            today_docs = firebase_client.db.collection('eod_reports').where('date', '==', today_date_str).stream()
+            # Query specifically for yesterday's submissions using the date field
+            yesterday_docs = firebase_client.db.collection('eod_reports').where('date', '==', yesterday_date_str).stream()
             
-            # Process each document from today's query
-            logger.info(f"=== PROCESSING TODAY'S SUBMISSIONS FOR DATE {today_date_str} ===")
-            for doc in today_docs:
+            # Process each document from yesterday's query
+            logger.info(f"=== PROCESSING YESTERDAY'S SUBMISSIONS FOR DATE {yesterday_date_str} ===")
+            for doc in yesterday_docs:
                 doc_data = doc.to_dict()
                 doc_id = doc.id
                 user_id = doc_data.get('user_id', 'No user ID')
@@ -524,23 +528,23 @@ def send_daily_non_submission_report(app):
                 logger.info(f"   - Timestamp: {timestamp}")
                 logger.info(f"   - Date field: {date_field}")
                 logger.info(f"   - Document ID: {doc_id}")
-                submitted_today.add(user_id)
+                submitted_yesterday.add(user_id)
             
-            logger.info(f"Found {len(submitted_today)} users who submitted today")
-            logger.info(f"Users who submitted: {list(submitted_today)}")
+            logger.info(f"Found {len(submitted_yesterday)} users who submitted yesterday")
+            logger.info(f"Users who submitted: {list(submitted_yesterday)}")
             
             # Calculate missing users
-            missing_users = [user_id for user_id in valid_users if user_id not in submitted_today]
+            missing_users = [user_id for user_id in valid_users if user_id not in submitted_yesterday]
             logger.info(f"Missing users count: {len(missing_users)} out of {len(valid_users)} total valid users")
             logger.info(f"Valid users list: {list(valid_users)}")
             logger.info(f"Missing users list: {missing_users}")
             
-            # Get past submissions to calculate consecutive missed days
+            # Get past submissions to calculate consecutive missed days and 30-day totals
             past_submissions = {}
             
             # Get submissions from the past 30 days using date field
-            thirty_days_ago = today - timedelta(days=30)
-            logger.info(f"Getting past submissions from {thirty_days_ago} to {today}")
+            thirty_days_ago = yesterday - timedelta(days=30)
+            logger.info(f"Getting past submissions from {thirty_days_ago} to {yesterday}")
             
             # Get all submissions and filter by date field
             all_past_docs = firebase_client.db.collection('eod_reports').stream()
@@ -561,8 +565,8 @@ def send_daily_non_submission_report(app):
                     # Parse the date string
                     submission_date = datetime.strptime(date_str, '%Y-%m-%d').date()
                     
-                    # Only include dates within our range
-                    if thirty_days_ago <= submission_date <= today:
+                    # Only include dates within our range (past 30 days including yesterday)
+                    if thirty_days_ago <= submission_date <= yesterday:
                         if user_id not in past_submissions:
                             past_submissions[user_id] = set()
                         
@@ -571,12 +575,15 @@ def send_daily_non_submission_report(app):
                     logger.warning(f"Invalid date format in document {doc.id}: {date_str}")
                     continue
             
-            # Now calculate consecutive missed days for each missing user
+            # Now calculate consecutive missed days and total missed days in last 30 days
             consecutive_missed_days = {}
+            total_missed_30_days = {}
+            
             for user_id in missing_users:
-                # Start from yesterday and go backwards
-                check_date = today - timedelta(days=1)
-                consecutive_days = 1  # Today is already missed
+                # Calculate consecutive missed days
+                # Start from 2 days ago (day before yesterday) and go backwards
+                check_date = yesterday - timedelta(days=1)
+                consecutive_days = 1  # Yesterday is already missed
                 
                 while True:
                     # Skip weekends and holidays
@@ -587,7 +594,7 @@ def send_daily_non_submission_report(app):
                     # Check if user submitted on this date
                     user_submissions = past_submissions.get(user_id, set())
                     if check_date in user_submissions:
-                        # Found a submission, stop counting
+                        # Found a submission, stop counting consecutive
                         break
                     else:
                         # No submission found, increment counter
@@ -599,6 +606,21 @@ def send_daily_non_submission_report(app):
                             break
                 
                 consecutive_missed_days[user_id] = consecutive_days
+                
+                # Calculate total missed working days in last 30 days
+                # Count all working days in the past 30 days
+                working_days_in_range = []
+                check_date = yesterday
+                for _ in range(30):
+                    # Only count working days (not weekends or holidays)
+                    if check_date.weekday() < 5 and check_date not in HOLIDAYS:
+                        working_days_in_range.append(check_date)
+                    check_date = check_date - timedelta(days=1)
+                
+                # Count how many of those working days the user missed
+                user_submissions = past_submissions.get(user_id, set())
+                missed_in_30_days = sum(1 for day in working_days_in_range if day not in user_submissions)
+                total_missed_30_days[user_id] = missed_in_30_days
             
             # Sort missing users by name for the report
             missing_users_with_names = [(user_id, user_names.get(user_id, "Unknown")) for user_id in missing_users]
@@ -607,7 +629,7 @@ def send_daily_non_submission_report(app):
             # Create management message
             mgmt_message = (
                 "📊 *Daily EOD Submission Report*\n"
-                f"📅 *Date:* {today.strftime('%A, %B %d, %Y')}\n\n"
+                f"📅 *Date:* {yesterday.strftime('%A, %B %d, %Y')}\n\n"
             )
             
             if missing_users:
@@ -616,15 +638,19 @@ def send_daily_non_submission_report(app):
                 # Add missing users to report (alphabetically by name)
                 for user_id, user_name in missing_users_with_names:
                     consecutive_days = consecutive_missed_days.get(user_id, 1)
-                    streak_text = "day" if consecutive_days == 1 else "days"
+                    missed_30_days = total_missed_30_days.get(user_id, 0)
+                    
+                    consecutive_text = "day" if consecutive_days == 1 else "days"
+                    total_text = "day" if missed_30_days == 1 else "days"
+                    
                     mgmt_message += f"• *{user_name}* (<@{user_id}>)\n"
-                    mgmt_message += f"   ↳ _Missed {consecutive_days} consecutive working {streak_text}_\n"
-                    logger.info(f"Adding to report: {user_name} (ID: {user_id}) - {consecutive_days} consecutive missed days")
+                    mgmt_message += f"   ↳ _Consecutive: {consecutive_days} {consecutive_text} | Last 30 days: {missed_30_days} {total_text}_\n"
+                    logger.info(f"Adding to report: {user_name} (ID: {user_id}) - {consecutive_days} consecutive, {missed_30_days} in last 30 days")
                 
                 # Add summary count
                 mgmt_message += f"\n_Total: {len(missing_users)} missing out of {len(valid_users)} expected submissions_"
             else:
-                mgmt_message += "✅ *All team members have submitted their EOD reports today!*"
+                mgmt_message += "✅ *All team members have submitted their EOD reports!*"
             
             # Log the final message
             logger.info(f"Final management message:\n{mgmt_message}")
