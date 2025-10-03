@@ -1700,6 +1700,18 @@ def api_missed_submissions(days=30):
         logger.error(f"Error getting missed submissions data: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/admin/trigger-daily-report', methods=['POST'])
+def trigger_daily_report():
+    """Admin endpoint to manually trigger the daily non-submission report"""
+    try:
+        from scheduler import send_daily_non_submission_report
+        logger.info("Manually triggering daily non-submission report...")
+        send_daily_non_submission_report(app)
+        return jsonify({'status': 'success', 'message': 'Daily report triggered successfully'}), 200
+    except Exception as e:
+        logger.error(f"Error triggering daily report: {str(e)}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
 if __name__ == '__main__':
     with app.app_context():
         try:
