@@ -115,6 +115,7 @@ def send_eod_prompts(app):
                 "U0890AG4ZEU",
                 "U0837HZE98X",
                 "U08CSFHTJ2X",
+                "U0972CXJCBD",  # Patricia Faye Ladisla
                 "USLACKBOT"     # Exclude Slackbot
             ]
             
@@ -219,6 +220,7 @@ def send_reminders(app):
                 "U0890AG4ZEU",
                 "U0837HZE98X",
                 "U08CSFHTJ2X",
+                "U0972CXJCBD",  # Patricia Faye Ladisla
                 "USLACKBOT"     # Exclude Slackbot
             ]
             
@@ -320,6 +322,7 @@ def send_final_reminders(app):
                 "U0890AG4ZEU",
                 "U0837HZE98X",
                 "U08CSFHTJ2X",
+                "U0972CXJCBD",  # Patricia Faye Ladisla
                 "USLACKBOT"     # Exclude Slackbot
             ]
             
@@ -430,6 +433,7 @@ def send_daily_non_submission_report(app):
                 "U0890AG4ZEU",
                 "U0837HZE98X",
                 "U08CSFHTJ2X",
+                "U0972CXJCBD",  # Patricia Faye Ladisla
                 "USLACKBOT"     # Exclude Slackbot
             ]
             logger.info(f"Will exclude internal team members and Slackbot: {INTERNAL_TEAM_IDS}")
