@@ -166,8 +166,6 @@ class SlackBot:
         return f"""
         *EOD Report from <@{report_data['user_id']}>*
         
-        ⏰ _Time tracking handled automatically via clock-in/clock-out system_
-        
         *Short-term Projects:*
         {report_data['short_term_projects']}
 
@@ -265,12 +263,12 @@ class SlackBot:
         """Build EOD report modal view"""
         
         blocks = [
-            # Note about automatic time tracking
+            # Reminder about clock-in requirement
             {
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": "ℹ️ *Time tracking is now automatic* - Your clock-in/clock-out times are tracked separately via `/clock-in` and `/clock-out` commands."
+                    "text": "⏰ *Reminder:* You must use `/clock-in` before submitting your EOD report."
                 }
             },
             # Divider for visual separation
