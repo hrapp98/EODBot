@@ -347,6 +347,20 @@ def handle_eod_submission(event):
         user_id = event.get('user')
         text = event.get('text').replace('submit eod:', '', 1).strip()
         
+        # Validate active clock-in session before processing EOD
+        if firebase_client:
+            is_valid, contractor_id, error_message = firebase_client.validate_clock_in_for_eod(user_id)
+            if not is_valid:
+                # Send detailed error message with instructions
+                full_message = f"⚠️ {error_message}\n\n" \
+                              f"Please use `/clock-in` to start your shift, then you can submit your EOD.\n\n" \
+                              f"If you forgot to clock in earlier today, please:\n" \
+                              f"1. Contact your account manager to note the missed clock-in\n" \
+                              f"2. Use `/clock-in` now\n" \
+                              f"3. Then submit your EOD report"
+                slack_bot.send_message(user_id, full_message)
+                return
+        
         # Create and save EOD report
         report = EODReport.create_from_text(user_id, text)
         
@@ -429,10 +443,6 @@ def slack_interactivity():
                 values = payload['view']['state']['values']
                 
                 report_data = {
-                    'time_in': values['time_in_block']['time_in_input']['selected_option']['value'],
-                    'time_out': values['time_out_block']['time_out_input']['selected_option']['value'],
-                    'full_shift': values['full_shift_block']['full_shift_input']['selected_option']['value'],
-                    'reason': values.get('reason_block', {}).get('reason_input', {}).get('value', ''),
                     'short_term_projects': values['short_term_block']['short_term_input']['value'],
                     'long_term_projects': values['long_term_block']['long_term_input']['value'],
                     'blockers': values['blockers_block']['blockers_input']['value'],
@@ -445,14 +455,46 @@ def slack_interactivity():
                 user_id = payload['user']['id']
                 report_data['user_id'] = user_id  # Add user_id to report_data
                 
-                # Check if this is an edit
+                # Validate active clock-in session before processing EOD (unless it's an edit)
                 try:
                     metadata = json.loads(payload['view'].get('private_metadata', '{}'))
                     is_edit = metadata.get('is_edit', False)
-                    report_id = metadata.get('report_id')
+                    
+                    if not is_edit and firebase_client:
+                        is_valid, contractor_id, error_message = firebase_client.validate_clock_in_for_eod(user_id)
+                        if not is_valid:
+                            # Send detailed error message with instructions
+                            full_message = f"⚠️ {error_message}\n\n" \
+                                          f"Please use `/clock-in` to start your shift, then you can submit your EOD.\n\n" \
+                                          f"If you forgot to clock in earlier today, please:\n" \
+                                          f"1. Contact your account manager to note the missed clock-in\n" \
+                                          f"2. Use `/clock-in` now\n" \
+                                          f"3. Then submit your EOD report"
+                            slack_bot.send_message(user_id, full_message)
+                            return jsonify({"response_action": "clear"})
                 except json.JSONDecodeError:
                     logger.warning("Invalid private_metadata JSON, treating as new submission")
                     is_edit = False
+                    
+                    # For new submissions, validate clock-in
+                    if firebase_client:
+                        is_valid, contractor_id, error_message = firebase_client.validate_clock_in_for_eod(user_id)
+                        if not is_valid:
+                            # Send detailed error message with instructions
+                            full_message = f"⚠️ {error_message}\n\n" \
+                                          f"Please use `/clock-in` to start your shift, then you can submit your EOD.\n\n" \
+                                          f"If you forgot to clock in earlier today, please:\n" \
+                                          f"1. Contact your account manager to note the missed clock-in\n" \
+                                          f"2. Use `/clock-in` now\n" \
+                                          f"3. Then submit your EOD report"
+                            slack_bot.send_message(user_id, full_message)
+                            return jsonify({"response_action": "clear"})
+                
+                # Extract metadata for report_id
+                try:
+                    metadata = json.loads(payload['view'].get('private_metadata', '{}'))
+                    report_id = metadata.get('report_id')
+                except json.JSONDecodeError:
                     report_id = None
 
                 # Close the modal immediately

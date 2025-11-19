@@ -149,9 +149,6 @@ class SlackBot:
         # Ensure all required fields are present
         required_fields = [
             'user_id',
-            'time_in',
-            'time_out',
-            'full_shift',
             'short_term_projects',
             'long_term_projects',
             'blockers',
@@ -163,48 +160,13 @@ class SlackBot:
         
         for field in required_fields:
             if field not in report_data:
-                # For backwards compatibility, only require new fields if they exist
-                if field in ['time_in', 'time_out', 'full_shift']:
-                    report_data[field] = 'Not specified'
-                elif field == 'reason':
-                    report_data[field] = ''
-                else:
-                    raise ValueError(f"Missing required field: {field}")
-        
-        # Convert time format for display (24hr stored format to 12hr display)
-        def convert_to_12hr(time_24hr):
-            if not time_24hr or time_24hr == 'Not specified':
-                return 'Not specified'
-            try:
-                hour, minute = map(int, time_24hr.split(':'))
-                if hour == 0:
-                    return f"12:{minute:02d} AM"
-                elif hour < 12:
-                    return f"{hour}:{minute:02d} AM"
-                elif hour == 12:
-                    return f"12:{minute:02d} PM"
-                else:
-                    return f"{hour-12}:{minute:02d} PM"
-            except:
-                return time_24hr
-        
-        time_in_display = convert_to_12hr(report_data.get('time_in', 'Not specified'))
-        time_out_display = convert_to_12hr(report_data.get('time_out', 'Not specified'))
-        
-        # Build shift info string
-        shift_info = f"*Time In:* {time_in_display} EST | *Time Out:* {time_out_display} EST"
-        full_shift_text = "Yes" if report_data.get('full_shift') == 'yes' else "No"
-        shift_info += f" | *Full Shift:* {full_shift_text}"
-        
-        # Add reason if full shift was not completed
-        if report_data.get('full_shift') == 'no' and report_data.get('reason'):
-            shift_info += f"\n*Reason:* {report_data['reason']}"
+                raise ValueError(f"Missing required field: {field}")
         
         # Format the report with all fields
         return f"""
         *EOD Report from <@{report_data['user_id']}>*
         
-        {shift_info}
+        ⏰ _Time tracking handled automatically via clock-in/clock-out system_
         
         *Short-term Projects:*
         {report_data['short_term_projects']}
@@ -302,118 +264,16 @@ class SlackBot:
     def _build_eod_modal(self, private_metadata=None, existing_data=None):
         """Build EOD report modal view"""
         
-        # Generate time options in 12-hour format with 30-minute intervals
-        time_options = []
-        
-        for hour in range(24):
-            for minute in [0, 30]:
-                # Store in 24-hour format
-                time_24hr = f"{hour:02d}:{minute:02d}"
-                
-                # Display in 12-hour format
-                if hour == 0:
-                    hour_12 = 12
-                    period = "AM"
-                elif hour < 12:
-                    hour_12 = hour
-                    period = "AM"
-                elif hour == 12:
-                    hour_12 = 12
-                    period = "PM"
-                else:
-                    hour_12 = hour - 12
-                    period = "PM"
-                
-                time_12hr = f"{hour_12}:{minute:02d} {period}"
-                
-                time_options.append({
-                    "text": {"type": "plain_text", "text": time_12hr},
-                    "value": time_24hr  # Store in 24hr format internally
-                })
-        
-        # Convert existing time values to display format
-        default_time_in = existing_data.get('time_in', '09:00') if existing_data else '09:00'
-        default_time_out = existing_data.get('time_out', '17:00') if existing_data else '17:00'
-        
         blocks = [
-            # Time In field
+            # Note about automatic time tracking
             {
-                "type": "input",
-                "block_id": "time_in_block",
-                "label": {"type": "plain_text", "text": "Time In (EST)"},
-                "element": {
-                    "type": "static_select",
-                    "action_id": "time_in_input",
-                    "placeholder": {"type": "plain_text", "text": "Select time in"},
-                    "options": time_options,
-                    "initial_option": next((opt for opt in time_options if opt["value"] == default_time_in), time_options[18])  # Default to 9:00 AM
-                }
-            },
-            # Time Out field
-            {
-                "type": "input",
-                "block_id": "time_out_block",
-                "label": {"type": "plain_text", "text": "Time Out (EST)"},
-                "element": {
-                    "type": "static_select",
-                    "action_id": "time_out_input",
-                    "placeholder": {"type": "plain_text", "text": "Select time out"},
-                    "options": time_options,
-                    "initial_option": next((opt for opt in time_options if opt["value"] == default_time_out), time_options[34])  # Default to 5:00 PM
-                }
-            },
-            # Full Shift field
-            {
-                "type": "input",
-                "block_id": "full_shift_block",
-                "label": {"type": "plain_text", "text": "Full Shift Completed?"},
-                "element": {
-                    "type": "radio_buttons",
-                    "action_id": "full_shift_input",
-                    "options": [
-                        {
-                            "text": {"type": "plain_text", "text": "Yes"},
-                            "value": "yes"
-                        },
-                        {
-                            "text": {"type": "plain_text", "text": "No"},
-                            "value": "no"
-                        }
-                    ],
-                    "initial_option": {
-                        "text": {"type": "plain_text", "text": "Yes" if existing_data and existing_data.get('full_shift') == 'yes' else "Yes"},
-                        "value": "yes" if not existing_data or existing_data.get('full_shift') == 'yes' else "no"
-                    }
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": "ℹ️ *Time tracking is now automatic* - Your clock-in/clock-out times are tracked separately via `/clock-in` and `/clock-out` commands."
                 }
             },
             # Divider for visual separation
-            {
-                "type": "divider"
-            },
-            # Contextual instruction for reason field
-            {
-                "type": "context",
-                "elements": [
-                    {
-                        "type": "mrkdwn",
-                        "text": "_If you answered 'No' to full shift, please provide a reason below:_"
-                    }
-                ]
-            },
-            # Reason field (optional, only needed when full shift is No)
-            {
-                "type": "input",
-                "block_id": "reason_block",
-                "label": {"type": "plain_text", "text": "Reason for Incomplete Shift"},
-                "element": {
-                    "type": "plain_text_input",
-                    "action_id": "reason_input",
-                    "multiline": True,
-                    "initial_value": existing_data.get('reason', '') if existing_data else '',
-                    "placeholder": {"type": "plain_text", "text": "Only required if you selected 'No' for full shift (e.g., doctor's appointment, early departure, etc.)"}
-                },
-                "optional": True
-            },
             {
                 "type": "divider"
             },

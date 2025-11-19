@@ -81,9 +81,6 @@ class FirebaseClient:
         try:
             # All fields are required
             required_fields = {
-                'time_in',
-                'time_out',
-                'full_shift',
                 'short_term_projects',
                 'long_term_projects',
                 'blockers',
@@ -536,3 +533,64 @@ class FirebaseClient:
         except Exception as e:
             logger.error(f"Error getting missed submissions for user {user_id}: {str(e)}")
             return []
+
+    def validate_clock_in_for_eod(self, slack_user_id):
+        """
+        Validate that contractor has an active clock-in session before EOD submission.
+        Returns tuple (is_valid, contractor_id, error_message)
+        """
+        try:
+            if not self.db:
+                logger.error("Firebase client not initialized")
+                return False, None, "System error: Database not available"
+
+            # First, get the contractor ID from the users collection
+            users_query = self.db.collection('users').where('slack_id', '==', slack_user_id).limit(1)
+            user_docs = list(users_query.stream())
+            
+            if not user_docs:
+                # Check if user has a contractorId in their profile
+                logger.warning(f"No user found in users collection for slack_id: {slack_user_id}")
+                return False, None, "You must clock in with /clock-in before submitting an EOD report."
+            
+            user_data = user_docs[0].to_dict()
+            contractor_id = user_data.get('contractorId')
+            
+            if contractor_id is None:
+                # If no contractorId, check attendanceLogs by slackUserId for backward compatibility
+                logger.info(f"No contractorId found for user {slack_user_id}, checking by slackUserId")
+                active_session_query = self.db.collection('attendanceLogs')\
+                    .where('slackUserId', '==', slack_user_id)\
+                    .where('clockOutAt', '==', None)\
+                    .limit(1)
+                
+                active_sessions = list(active_session_query.get())
+                
+                if not active_sessions:
+                    logger.info(f"No active clock-in session found for user {slack_user_id} (by slackUserId)")
+                    return False, None, "You must clock in with /clock-in before submitting an EOD report."
+                
+                session_data = active_sessions[0].to_dict()
+                contractor_id = session_data.get('contractorId')
+                logger.info(f"Found active clock-in session for user {slack_user_id}, contractorId: {contractor_id}")
+                return True, contractor_id, None
+            
+            # Query attendanceLogs for active session by contractorId
+            active_session_query = self.db.collection('attendanceLogs')\
+                .where('contractorId', '==', contractor_id)\
+                .where('clockOutAt', '==', None)\
+                .limit(1)
+
+            active_sessions = list(active_session_query.get())
+
+            if not active_sessions:
+                logger.info(f"No active clock-in session found for contractor {contractor_id} (user: {slack_user_id})")
+                return False, contractor_id, "You must clock in with /clock-in before submitting an EOD report."
+
+            logger.info(f"Active clock-in session validated for contractor {contractor_id} (user: {slack_user_id})")
+            return True, contractor_id, None
+
+        except Exception as e:
+            logger.error(f"Error validating clock-in for EOD: {str(e)}")
+            # On error, fail safely - reject the submission
+            return False, None, "You must clock in with /clock-in before submitting an EOD report."
