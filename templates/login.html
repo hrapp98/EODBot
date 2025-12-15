@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Hire Overseas EOD Dashboard</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <style>
+        :root {
+            --primary-color: #6366f1;
+            --card-bg: #1e293b;
+            --body-bg: #0f172a;
+            --text-color: #e2e8f0;
+            --border-color: #334155;
+        }
+        
+        body {
+            background-color: var(--body-bg);
+            color: var(--text-color);
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .login-container {
+            width: 100%;
+            max-width: 400px;
+            padding: 2rem;
+        }
+        
+        .login-card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 1rem;
+            padding: 2.5rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+        
+        .login-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        
+        .login-logo {
+            font-size: 3rem;
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+        }
+        
+        .login-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        
+        .login-subtitle {
+            color: #94a3b8;
+            font-size: 0.875rem;
+        }
+        
+        .form-control {
+            background-color: var(--body-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            padding: 0.75rem 1rem;
+            font-size: 1rem;
+            border-radius: 0.5rem;
+        }
+        
+        .form-control:focus {
+            background-color: var(--body-bg);
+            border-color: var(--primary-color);
+            color: var(--text-color);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+        }
+        
+        .form-control::placeholder {
+            color: #64748b;
+        }
+        
+        .btn-primary {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+            padding: 0.75rem 1.5rem;
+            font-weight: 500;
+            border-radius: 0.5rem;
+            width: 100%;
+            font-size: 1rem;
+            transition: all 0.2s;
+        }
+        
+        .btn-primary:hover {
+            background-color: #5558e3;
+            border-color: #5558e3;
+            transform: translateY(-1px);
+        }
+        
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+        
+        .input-group-text {
+            background-color: var(--body-bg);
+            border: 1px solid var(--border-color);
+            border-right: none;
+            color: #64748b;
+        }
+        
+        .input-group .form-control {
+            border-left: none;
+        }
+        
+        .input-group:focus-within .input-group-text {
+            border-color: var(--primary-color);
+        }
+        
+        .alert-danger {
+            background-color: rgba(239, 68, 68, 0.1);
+            border-color: rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+            border-radius: 0.5rem;
+        }
+        
+        .password-toggle {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            color: #64748b;
+            cursor: pointer;
+            z-index: 10;
+        }
+        
+        .password-toggle:hover {
+            color: var(--text-color);
+        }
+        
+        .password-wrapper {
+            position: relative;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-card">
+            <div class="login-header">
+                <div class="login-logo">
+                    <i class="bi bi-clipboard-data"></i>
+                </div>
+                <h1 class="login-title">EOD Dashboard</h1>
+                <p class="login-subtitle">Enter password to access the dashboard</p>
+            </div>
+            
+            {% if error %}
+            <div class="alert alert-danger mb-4" role="alert">
+                <i class="bi bi-exclamation-triangle me-2"></i>{{ error }}
+            </div>
+            {% endif %}
+            
+            <form method="POST" action="{{ url_for('login') }}">
+                <div class="mb-4">
+                    <div class="password-wrapper">
+                        <div class="input-group">
+                            <span class="input-group-text">
+                                <i class="bi bi-lock"></i>
+                            </span>
+                            <input type="password" 
+                                   class="form-control" 
+                                   id="password" 
+                                   name="password" 
+                                   placeholder="Enter password"
+                                   required
+                                   autofocus>
+                        </div>
+                        <button type="button" class="password-toggle" onclick="togglePassword()">
+                            <i class="bi bi-eye" id="toggleIcon"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-box-arrow-in-right me-2"></i>Sign In
+                </button>
+            </form>
+        </div>
+    </div>
+    
+    <script>
+        function togglePassword() {
+            const passwordInput = document.getElementById('password');
+            const toggleIcon = document.getElementById('toggleIcon');
+            
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                toggleIcon.classList.remove('bi-eye');
+                toggleIcon.classList.add('bi-eye-slash');
+            } else {
+                passwordInput.type = 'password';
+                toggleIcon.classList.remove('bi-eye-slash');
+                toggleIcon.classList.add('bi-eye');
+            }
+        }
+    </script>
+</body>
+</html>

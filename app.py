@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template, redirect, url_for, Response
+from flask import Flask, request, jsonify, render_template, redirect, url_for, Response, session
 from markupsafe import Markup
 from datetime import datetime, timedelta
 import hmac
@@ -26,21 +26,12 @@ def check_auth(password):
     """Check if password matches"""
     return password == DASHBOARD_PASSWORD
 
-def authenticate():
-    """Send a 401 response that prompts for password"""
-    return Response(
-        'Access Denied. Please enter the correct password.',
-        401,
-        {'WWW-Authenticate': 'Basic realm="EOD Dashboard - Enter password"'}
-    )
-
 def requires_auth(f):
-    """Decorator to require password for a route"""
+    """Decorator to require login for a route"""
     @wraps(f)
     def decorated(*args, **kwargs):
-        auth = request.authorization
-        if not auth or not check_auth(auth.password):
-            return authenticate()
+        if not session.get('authenticated'):
+            return redirect(url_for('login', next=request.url))
         return f(*args, **kwargs)
     return decorated
 
@@ -162,6 +153,27 @@ sheets_client = SheetsClient() if Config.GOOGLE_SERVICE_ACCOUNT else None
 _team_cache = None
 _team_cache_time = 0
 _team_cache_ttl = 300  # 5 minutes
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """Login page"""
+    error = None
+    if request.method == 'POST':
+        password = request.form.get('password', '')
+        if check_auth(password):
+            session['authenticated'] = True
+            session.permanent = True
+            next_url = request.args.get('next') or url_for('dashboard')
+            return redirect(next_url)
+        else:
+            error = 'Incorrect password. Please try again.'
+    return render_template('login.html', error=error)
+
+@app.route('/logout')
+def logout():
+    """Logout and clear session"""
+    session.pop('authenticated', None)
+    return redirect(url_for('login'))
 
 @app.route('/')
 @requires_auth
