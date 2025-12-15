@@ -538,59 +538,64 @@ class FirebaseClient:
         """
         Validate that contractor has an active clock-in session before EOD submission.
         Returns tuple (is_valid, contractor_id, error_message)
+        
+        Steps:
+        1. Look up contractor by slackUserId in 'contractors' collection
+        2. Get the numeric 'id' field (contractorId is a NUMBER, not string)
+        3. Query attendanceLogs using numeric contractorId where clockOutAt == None
         """
         try:
             if not self.db:
                 logger.error("Firebase client not initialized")
                 return False, None, "System error: Database not available"
 
-            # First, get the contractor ID from the users collection
-            users_query = self.db.collection('users').where('slack_id', '==', slack_user_id).limit(1)
-            user_docs = list(users_query.stream())
+            # Step 1: Look up contractor by Slack ID in the 'contractors' collection
+            logger.info(f"Looking up contractor for slack_user_id: {slack_user_id}")
+            contractor_query = self.db.collection('contractors').where('slackUserId', '==', slack_user_id).limit(1)
+            contractor_docs = list(contractor_query.stream())
             
-            if not user_docs:
-                # Check if user has a contractorId in their profile
-                logger.warning(f"No user found in users collection for slack_id: {slack_user_id}")
-                return False, None, "You must clock in with /clock-in before submitting an EOD report."
+            if not contractor_docs:
+                logger.warning(f"No contractor found in contractors collection for slackUserId: {slack_user_id}")
+                return False, None, "Your Slack account is not linked to a contractor profile. Please contact your account manager."
             
-            user_data = user_docs[0].to_dict()
-            contractor_id = user_data.get('contractorId')
+            contractor_data = contractor_docs[0].to_dict()
+            # contractorId is a NUMBER (int), not a string - get the 'id' field
+            contractor_id = contractor_data.get('id')
             
             if contractor_id is None:
-                # If no contractorId, check attendanceLogs by slackUserId for backward compatibility
-                logger.info(f"No contractorId found for user {slack_user_id}, checking by slackUserId")
-                active_session_query = self.db.collection('attendanceLogs')\
-                    .where('slackUserId', '==', slack_user_id)\
-                    .where('clockOutAt', '==', None)\
-                    .limit(1)
-                
-                active_sessions = list(active_session_query.get())
-                
-                if not active_sessions:
-                    logger.info(f"No active clock-in session found for user {slack_user_id} (by slackUserId)")
-                    return False, None, "You must clock in with /clock-in before submitting an EOD report."
-                
-                session_data = active_sessions[0].to_dict()
-                contractor_id = session_data.get('contractorId')
-                logger.info(f"Found active clock-in session for user {slack_user_id}, contractorId: {contractor_id}")
-                return True, contractor_id, None
+                logger.warning(f"Contractor found but missing 'id' field for slackUserId: {slack_user_id}")
+                return False, None, "Your contractor profile is incomplete. Please contact your account manager."
             
-            # Query attendanceLogs for active session by contractorId
+            # Ensure contractor_id is an integer (the attendanceLogs uses numeric contractorId)
+            if isinstance(contractor_id, str):
+                try:
+                    contractor_id = int(contractor_id)
+                except ValueError:
+                    logger.error(f"Cannot convert contractor_id to int: {contractor_id}")
+                    return False, None, "System error: Invalid contractor ID format."
+            
+            logger.info(f"Found contractor with id: {contractor_id} (type: {type(contractor_id).__name__}) for slack_user_id: {slack_user_id}")
+            
+            # Step 2: Query attendanceLogs for active session using numeric contractorId
+            # clockOutAt == None means the session is still active
             active_session_query = self.db.collection('attendanceLogs')\
                 .where('contractorId', '==', contractor_id)\
                 .where('clockOutAt', '==', None)\
                 .limit(1)
 
-            active_sessions = list(active_session_query.get())
+            active_sessions = list(active_session_query.stream())
 
             if not active_sessions:
                 logger.info(f"No active clock-in session found for contractor {contractor_id} (user: {slack_user_id})")
                 return False, contractor_id, "You must clock in with /clock-in before submitting an EOD report."
 
-            logger.info(f"Active clock-in session validated for contractor {contractor_id} (user: {slack_user_id})")
+            session_data = active_sessions[0].to_dict()
+            logger.info(f"Active clock-in session validated for contractor {contractor_id} (user: {slack_user_id}), session: {active_sessions[0].id}")
             return True, contractor_id, None
 
         except Exception as e:
             logger.error(f"Error validating clock-in for EOD: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
             # On error, fail safely - reject the submission
-            return False, None, "You must clock in with /clock-in before submitting an EOD report."
+            return False, None, "System error while validating clock-in. Please try again or contact support."
