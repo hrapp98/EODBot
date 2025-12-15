@@ -1,0 +1,112 @@
+2025-12-15 11:11:29.69
+b29dd77a
+User
+2025-12-15 16:11:29 [INFO] werkzeug: 127.0.0.1 - - [15/Dec/2025 16:11:29] "POST /slack/interactive-endpoint HTTP/1.1" 200 -
+2025-12-15 11:13:23.26
+b29dd77a
+User
+2025-12-15 16:13:23 [INFO] slack_bot: Successfully opened modal
+2025-12-15 11:13:23.26
+b29dd77a
+User
+2025-12-15 16:13:23 [INFO] werkzeug: 127.0.0.1 - - [15/Dec/2025 16:13:23] "POST /slack/commands HTTP/1.1" 200 -
+2025-12-15 11:14:05.74
+b29dd77a
+User
+2025-12-15 16:14:05 [WARNING] __main__: Invalid private_metadata JSON, treating as new submission
+2025-12-15 11:14:05.74
+b29dd77a
+User
+2025-12-15 16:14:05 [INFO] __main__: Received view submission
+2025-12-15 11:14:05.77
+b29dd77a
+User
+2025-12-15 16:14:05 [WARNING] firebase_client: No user found in users collection for slack_id: U08410NBH7T
+2025-12-15 11:14:05.93
+b29dd77a
+User
+2025-12-15 16:14:05 [INFO] werkzeug: 127.0.0.1 - - [15/Dec/2025 16:14:05] "POST /slack/interactive-endpoint HTTP/1.1" 200 -
+2025-12-15 11:15:03.41
+b29dd77a
+User
+2025-12-15 16:15:03 [INFO] werkzeug: 127.0.0.1 - - [15/Dec/2025 16:15:03] "GET / HTTP/1.1" 302 -
+2025-12-15 11:15:04.10
+b29dd77a
+User
+2025-12-15 16:15:04 [INFO] werkzeug: 127.0.0.1 - - [15/Dec/2025 16:15:04] "GET /dashboard HTTP/1.1" 200 -
+2025-12-15 11:15:04.41
+b29dd77a
+User
+2025-12-15 16:15:04 [INFO] werkzeug: 127.0.0.1 - - [15/Dec/2025 16:15:04] "GET /favicon.ico HTTP/1.1" 404 -
+2025-12-15 11:15:13.95
+b29dd77a
+User
+2025-12-15 16:15:13 [INFO] werkzeug: 127.0.0.1 - - [15/Dec/2025 16:15:13] "GET / HTTP/1.1" 302 -
+2025-12-15 11:17:05.16
+b29dd77a
+User
+2025-12-15 16:17:05 [INFO] slack_bot: Successfully opened modal
+2025-12-15 11:17:05.17
+b29dd77a
+User
+2025-12-15 16:17:05 [INFO] werkzeug: 127.0.0.1 - - [15/Dec/2025 16:17:05] "POST /slack/commands HTTP/1.1" 200 -
+2025-12-15 11:17:17.91
+b29dd77a
+User
+2025-12-15 16:17:17 [INFO] werkzeug: 127.0.0.1 - - [15/Dec/2025 16:17:17] "POST /slack/commands HTTP/1.1" 200 -
+2025-12-15 11:17:23.73
+b29dd77a
+User
+2025-12-15 16:17:23 [WARNING] __main__: Invalid private_metadata JSON, treating as new submission
+2025-12-15 11:17:23.73
+b29dd77a
+User
+2025-12-15 16:17:23 [INFO] __main__: Received view submission
+2025-12-15 11:17:23.77
+b29dd77a
+User
+2025-12-15 16:17:23 [WARNING] firebase_client: No user found in users collection for slack_id: U083K838X8V
+2025-12-15 11:17:23.97
+b29dd77a
+User
+2025-12-15 16:17:23 [INFO] werkzeug: 127.0.0.1 - - [15/Dec/2025 16:17:23] "POST /slack/interactive-endpoint HTTP/1.1" 200 -
+2025-12-15 11:17:37.33
+b29dd77a
+User
+2025-12-15 16:17:37 [INFO] slack_bot: Successfully opened modal
+2025-12-15 11:17:37.33
+b29dd77a
+User
+2025-12-15 16:17:37 [INFO] werkzeug: 127.0.0.1 - - [15/Dec/2025 16:17:37] "POST /slack/commands HTTP/1.1" 200 -
+2025-12-15 11:17:43.64
+b29dd77a
+User
+2025-12-15 16:17:43 [WARNING] __main__: Invalid private_metadata JSON, treating as new submission
+2025-12-15 11:17:43.64
+b29dd77a
+User
+2025-12-15 16:17:43 [INFO] __main__: Received view submission
+2025-12-15 11:17:43.67
+b29dd77a
+User
+2025-12-15 16:17:43 [WARNING] firebase_client: No user found in users collection for slack_id: U083K838X8V
+2025-12-15 11:17:43.82
+b29dd77a
+User
+2025-12-15 16:17:43 [INFO] werkzeug: 127.0.0.1 - - [15/Dec/2025 16:17:43] "POST /slack/interactive-endpoint HTTP/1.1" 200 -
+2025-12-15 11:19:43.18
+b29dd77a
+User
+2025-12-15 16:19:43 [WARNING] __main__: Invalid private_metadata JSON, treating as new submission
+2025-12-15 11:19:43.18
+b29dd77a
+User
+2025-12-15 16:19:43 [INFO] __main__: Received view submission
+2025-12-15 11:19:43.26
+b29dd77a
+User
+2025-12-15 16:19:43 [INFO] firebase_client: No contractorId found for user U091S681MS5, checking by slackUserId
+2025-12-15 11:19:43.33
+b29dd77a
+User
+2025-12-15 16:19:43 [INFO] firebase_client: Found active clock-in session for user U091S681MS5, contractorId: 1753056548156

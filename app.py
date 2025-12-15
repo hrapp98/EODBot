@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template, redirect, url_for
+from flask import Flask, request, jsonify, render_template, redirect, url_for, Response
 from markupsafe import Markup
 from datetime import datetime, timedelta
 import hmac
@@ -15,9 +15,34 @@ from zoneinfo import ZoneInfo
 from sheets_client import SheetsClient
 from scheduler import setup_scheduler
 from flask_compress import Compress
-from functools import lru_cache
+from functools import lru_cache, wraps
 import time
 from flask_assets import Environment, Bundle
+
+# Password protection for web dashboard
+DASHBOARD_PASSWORD = os.environ.get('DASHBOARD_PASSWORD', 'HireOverseasPW')
+
+def check_auth(password):
+    """Check if password matches"""
+    return password == DASHBOARD_PASSWORD
+
+def authenticate():
+    """Send a 401 response that prompts for password"""
+    return Response(
+        'Access Denied. Please enter the correct password.',
+        401,
+        {'WWW-Authenticate': 'Basic realm="EOD Dashboard - Enter password"'}
+    )
+
+def requires_auth(f):
+    """Decorator to require password for a route"""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        auth = request.authorization
+        if not auth or not check_auth(auth.password):
+            return authenticate()
+        return f(*args, **kwargs)
+    return decorated
 
 # Set up logging first
 logging.basicConfig(
@@ -139,11 +164,13 @@ _team_cache_time = 0
 _team_cache_ttl = 300  # 5 minutes
 
 @app.route('/')
+@requires_auth
 def index():
     """Redirect to dashboard"""
     return redirect(url_for('dashboard'))
 
 @app.route('/dashboard')
+@requires_auth
 def dashboard():
     """Render dashboard with minimal initial data and async loading"""
     try:
@@ -167,6 +194,7 @@ def dashboard():
         return "Error loading dashboard. Please check server logs.", 500
 
 @app.route('/api/dashboard-data')
+@requires_auth
 def dashboard_data():
     """API endpoint to get dashboard data asynchronously"""
     try:
@@ -592,6 +620,7 @@ def slack_interactivity():
     return jsonify({"message": "Success"}), 200
 
 @app.route('/dashboard/report/<report_id>')
+@requires_auth
 def view_report(report_id):
     """View detailed EOD report"""
     try:
@@ -649,6 +678,7 @@ def view_report(report_id):
         return "Error viewing report. Please check server logs.", 500
 
 @app.route('/api/users', methods=['POST'])
+@requires_auth
 def add_user():
     """Add a new user to the system"""
     try:
@@ -703,6 +733,7 @@ def add_user():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/users/<slack_id>/status', methods=['PUT'])
+@requires_auth
 def update_user_status(slack_id):
     """Update a user's active status"""
     try:
@@ -731,6 +762,7 @@ def update_user_status(slack_id):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/users', methods=['GET'])
+@requires_auth
 def get_users():
     """Get all users"""
     try:
@@ -741,6 +773,7 @@ def get_users():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/user/<user_id>')
+@requires_auth
 def user_profile(user_id):
     """View user profile with submission history"""
     try:
@@ -911,6 +944,7 @@ def user_profile(user_id):
         return "Error loading user profile. Please check server logs.", 500
 
 @app.route('/dashboard/user/<user_id>')
+@requires_auth
 def redirect_user_profile(user_id):
     """Redirect from old URL pattern to new one"""
     return redirect(url_for('user_profile', user_id=user_id))
@@ -995,6 +1029,7 @@ def initialize_internal_users():
     sync_users_from_slack()
 
 @app.route('/stats/<date_range>')
+@requires_auth
 def get_stats(date_range):
     """Get submission statistics for the given date range"""
     try:
@@ -1105,6 +1140,7 @@ def get_stats(date_range):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/stats/specific/<date_str>')
+@requires_auth
 def get_specific_date_stats(date_str):
     """Get submission statistics for a specific date"""
     try:
@@ -1157,6 +1193,7 @@ def get_specific_date_stats(date_str):
 
 @app.route('/missed')
 @app.route('/missed/<int:days>')
+@requires_auth
 def missed_submissions(days=30):
     """View missed submissions"""
     try:
@@ -1175,6 +1212,7 @@ def missed_submissions(days=30):
         return "Error loading missed submissions. Please check server logs.", 500
 
 @app.route('/api/send_reminder', methods=['POST'])
+@requires_auth
 def send_reminder():
     """API endpoint to send a reminder to a user"""
     try:
@@ -1200,6 +1238,7 @@ def send_reminder():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/team')
+@requires_auth
 def team():
     """Render team members page with caching"""
     global _team_cache, _team_cache_time
@@ -1221,6 +1260,7 @@ def team():
         return "Error loading team page. Please check server logs.", 500
 
 @app.route('/api/team-data')
+@requires_auth
 def team_data():
     """API endpoint to get team data for async loading - highly optimized version"""
     try:
@@ -1306,6 +1346,7 @@ def team_data():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/sync-users', methods=['POST'])
+@requires_auth
 def api_sync_users():
     """API endpoint to sync users from Slack"""
     try:
@@ -1316,6 +1357,7 @@ def api_sync_users():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/team-members')
+@requires_auth
 def api_team_members():
     """API endpoint to get team members for dashboard"""
     try:
@@ -1463,6 +1505,7 @@ def api_team_members():
         return jsonify({"error": "Failed to load team members"}), 500
 
 @app.route('/api/recent-reports')
+@requires_auth
 def recent_reports():
     """API endpoint to get paginated recent reports"""
     try:
@@ -1557,6 +1600,7 @@ def recent_reports():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/report/<report_id>')
+@requires_auth
 def get_report_detail(report_id):
     """API endpoint to get a single report by ID"""
     try:
@@ -1625,6 +1669,7 @@ def get_report_detail(report_id):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/missed-submissions/<int:days>')
+@requires_auth
 def api_missed_submissions(days=30):
     """API endpoint to get missed submissions data asynchronously"""
     try:
@@ -1743,6 +1788,7 @@ def api_missed_submissions(days=30):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/admin/trigger-daily-report', methods=['POST'])
+@requires_auth
 def trigger_daily_report():
     """Admin endpoint to manually trigger the daily non-submission report"""
     try:
