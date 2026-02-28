@@ -37,28 +37,56 @@ class SlackBot:
             logger.error(f"Error ensuring channel membership: {str(e)}")
 
     def send_eod_prompt(self, trigger_id, private_metadata=None, existing_data=None):
-        """Send EOD report modal"""
+        """Send EOD report modal. Returns the view_id on success, None on failure."""
         try:
             logger.debug(f"Opening modal with trigger_id: {trigger_id}")
-            
+
             # Build modal view
             view = self._build_eod_modal(private_metadata, existing_data)
 
             logger.debug(f"Sending modal view: {json.dumps(view, indent=2)}")
-            
+
             # Open the modal
             response = self.client.views_open(
                 trigger_id=trigger_id,
                 view=view
             )
-            
+
             if response["ok"]:
                 logger.info("Successfully opened modal")
+                return response["view"]["id"]
             else:
                 logger.error(f"Error opening modal: {response.get('error')}")
-                
+                return None
+
         except Exception as e:
             logger.error(f"Error sending EOD prompt: {str(e)}")
+            return None
+
+    def update_view_to_already_submitted(self, view_id, date):
+        """Replace an open modal's content with an 'already submitted' notice."""
+        try:
+            view = {
+                "type": "modal",
+                "title": {"type": "plain_text", "text": "EOD Report"},
+                "close": {"type": "plain_text", "text": "Close"},
+                "blocks": [
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": f"Your EOD Report has already been submitted for *{date.strftime('%B %d, %Y')}*.\n\nUse `/eod` again after closing this dialog to view or edit your report."
+                        }
+                    }
+                ]
+            }
+            response = self.client.views_update(view_id=view_id, view=view)
+            if response["ok"]:
+                logger.info(f"Updated modal {view_id} to already-submitted state")
+            else:
+                logger.error(f"Error updating modal: {response.get('error')}")
+        except Exception as e:
+            logger.error(f"Error updating view to already submitted: {str(e)}")
     
     def send_reminder(self, user_id):
         """Send reminder for missing EOD report"""

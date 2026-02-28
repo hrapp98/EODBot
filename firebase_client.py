@@ -227,44 +227,28 @@ class FirebaseClient:
         if not self.db:
             logger.error("Firebase client not initialized")
             return None
-        
+
         try:
-            from datetime import datetime
-            from zoneinfo import ZoneInfo
-            
-            # Convert date to start and end of day in EST
-            start_of_day = datetime.combine(date, datetime.min.time())
-            start_of_day = start_of_day.replace(tzinfo=ZoneInfo("America/New_York"))
-            
-            end_of_day = datetime.combine(date, datetime.max.time())
-            end_of_day = end_of_day.replace(tzinfo=ZoneInfo("America/New_York"))
-            
-            logger.debug(f"Checking for reports between {start_of_day.isoformat()} and {end_of_day.isoformat()}")
-            logger.debug(f"Querying for user_id: {user_id}")
-            
-            # Query for reports within the day
+            # Use the 'date' string field (YYYY-MM-DD) stored on every report
+            # for a direct Firestore query instead of fetching all reports
+            date_str = date.strftime('%Y-%m-%d')
+
+            logger.debug(f"Checking for reports on date: {date_str} for user_id: {user_id}")
+
             reports_ref = self.db.collection('eod_reports')
-            query = reports_ref.where('user_id', '==', user_id)
-            
-            # Get all documents and filter in Python (temporary workaround)
-            docs = query.stream()
-            matching_reports = []
-            
-            for doc in docs:
-                data = doc.to_dict()
-                timestamp = data.get('timestamp')
-                if isinstance(timestamp, datetime):
-                    if start_of_day <= timestamp <= end_of_day:
-                        data['id'] = doc.id
-                        matching_reports.append(data)
-                        logger.debug(f"Found matching report: {data}")
-            
-            if matching_reports:
-                return matching_reports[0]
-            
+            query = reports_ref.where('user_id', '==', user_id).where('date', '==', date_str).limit(1)
+
+            docs = list(query.stream())
+
+            if docs:
+                data = docs[0].to_dict()
+                data['id'] = docs[0].id
+                logger.debug(f"Found matching report: {data}")
+                return data
+
             logger.debug("No existing report found")
             return None
-            
+
         except Exception as e:
             logger.error(f"Error getting user report: {str(e)}")
             return None

@@ -17,6 +17,7 @@ from scheduler import setup_scheduler
 from flask_compress import Compress
 from functools import lru_cache, wraps
 import time
+import threading
 from flask_assets import Environment, Bundle
 
 # Password protection for web dashboard
@@ -431,35 +432,36 @@ def slack_commands():
         trigger_id = request.form.get('trigger_id')
         
         if command == '/eod':
-            # Check for existing report
-            if firebase_client:
-                try:
-                    today = datetime.now(ZoneInfo("America/New_York")).date()
-                    existing_report = firebase_client.get_user_report_for_date(user_id, today)
-                    
-                    if existing_report:
-                        # Send message with interactive buttons
-                        slack_bot.send_already_submitted_message(channel_id, user_id, today)
-                        return ('', 200)  # Return empty 200 response with no content
-                    else:
-                        # No existing report, open the modal
-                        slack_bot.send_eod_prompt(trigger_id)
-                        return jsonify({
-                            'response_type': 'ephemeral',
-                            'text': 'Opening EOD report form...'
-                        })
-                except Exception as e:
-                    logger.error(f"Error checking existing report: {str(e)}")
-                    return jsonify({
-                        'response_type': 'ephemeral',
-                        'text': 'Sorry, there was an error checking your report status.'
-                    }), 500
-            else:
+            if not firebase_client:
                 logger.error("Firebase client not initialized")
                 return jsonify({
                     'response_type': 'ephemeral',
                     'text': 'Sorry, the EOD report system is not properly configured.'
                 }), 500
+
+            # Open the modal IMMEDIATELY to consume the trigger_id
+            # before its 3-second expiry. Firebase checks happen after.
+            view_id = slack_bot.send_eod_prompt(trigger_id)
+
+            # Check for existing report in background thread.
+            # If one exists, update the already-open modal to notify the user.
+            def check_existing_report(user_id, channel_id, view_id):
+                try:
+                    today = datetime.now(ZoneInfo("America/New_York")).date()
+                    existing_report = firebase_client.get_user_report_for_date(user_id, today)
+
+                    if existing_report and view_id:
+                        slack_bot.update_view_to_already_submitted(view_id, today)
+                except Exception as e:
+                    logger.error(f"Error checking existing report: {str(e)}")
+
+            thread = threading.Thread(
+                target=check_existing_report,
+                args=(user_id, channel_id, view_id)
+            )
+            thread.start()
+
+            return ('', 200)
             
     except Exception as e:
         logger.error(f"Error handling slash command: {str(e)}")
