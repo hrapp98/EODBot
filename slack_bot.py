@@ -63,30 +63,27 @@ class SlackBot:
             logger.error(f"Error sending EOD prompt: {str(e)}")
             return None
 
-    def update_view_to_already_submitted(self, view_id, date):
-        """Replace an open modal's content with an 'already submitted' notice."""
+    def update_view_to_edit_mode(self, view_id, existing_report):
+        """Replace an open modal with the form pre-filled for editing."""
         try:
-            view = {
-                "type": "modal",
-                "title": {"type": "plain_text", "text": "EOD Report"},
-                "close": {"type": "plain_text", "text": "Close"},
-                "blocks": [
-                    {
-                        "type": "section",
-                        "text": {
-                            "type": "mrkdwn",
-                            "text": f"Your EOD Report has already been submitted for *{date.strftime('%B %d, %Y')}*.\n\nUse `/eod` again after closing this dialog to view or edit your report."
-                        }
-                    }
-                ]
-            }
+            report_id = existing_report.get('id')
+            metadata = json.dumps({'is_edit': True, 'report_id': report_id})
+            view = self._build_eod_modal(private_metadata=metadata, existing_data=existing_report)
+            # Add a banner so the user knows they're editing
+            view['blocks'].insert(0, {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": "You already submitted a report today. You can edit it below."
+                }
+            })
             response = self.client.views_update(view_id=view_id, view=view)
             if response["ok"]:
-                logger.info(f"Updated modal {view_id} to already-submitted state")
+                logger.info(f"Updated modal {view_id} to edit mode for report {report_id}")
             else:
-                logger.error(f"Error updating modal: {response.get('error')}")
+                logger.error(f"Error updating modal to edit mode: {response.get('error')}")
         except Exception as e:
-            logger.error(f"Error updating view to already submitted: {str(e)}")
+            logger.error(f"Error updating view to edit mode: {str(e)}")
     
     def send_reminder(self, user_id):
         """Send reminder for missing EOD report"""

@@ -444,14 +444,15 @@ def slack_commands():
             view_id = slack_bot.send_eod_prompt(trigger_id)
 
             # Check for existing report in background thread.
-            # If one exists, update the already-open modal to notify the user.
+            # If one exists, update the already-open modal to edit mode
+            # with the existing data pre-filled.
             def check_existing_report(user_id, channel_id, view_id):
                 try:
                     today = datetime.now(ZoneInfo("America/New_York")).date()
                     existing_report = firebase_client.get_user_report_for_date(user_id, today)
 
                     if existing_report and view_id:
-                        slack_bot.update_view_to_already_submitted(view_id, today)
+                        slack_bot.update_view_to_edit_mode(view_id, existing_report)
                 except Exception as e:
                     logger.error(f"Error checking existing report: {str(e)}")
 
