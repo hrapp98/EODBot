@@ -561,19 +561,28 @@ class FirebaseClient:
             logger.info(f"Found contractor with id: {contractor_id} (type: {type(contractor_id).__name__}) for slack_user_id: {slack_user_id}")
             
             # Step 2: Query attendanceLogs for active session using numeric contractorId
-            # clockOutAt == None means the session is still active
+            # Get the most recent attendance log and check if clockOutAt is missing or null
+            # Note: Firestore's where('field', '==', None) only matches explicit null,
+            # not missing fields. So we query by contractorId, order by clockInAt desc,
+            # and check the result manually.
             active_session_query = self.db.collection('attendanceLogs')\
                 .where('contractorId', '==', contractor_id)\
-                .where('clockOutAt', '==', None)\
+                .order_by('clockInAt', direction='DESCENDING')\
                 .limit(1)
 
             active_sessions = list(active_session_query.stream())
 
             if not active_sessions:
-                logger.info(f"No active clock-in session found for contractor {contractor_id} (user: {slack_user_id})")
+                logger.info(f"No attendance logs found for contractor {contractor_id} (user: {slack_user_id})")
                 return False, contractor_id, "You must clock in with /clock-in before submitting an EOD report."
 
             session_data = active_sessions[0].to_dict()
+            clock_out_at = session_data.get('clockOutAt')
+
+            if clock_out_at is not None:
+                logger.info(f"Most recent session already clocked out for contractor {contractor_id} (user: {slack_user_id})")
+                return False, contractor_id, "You must clock in with /clock-in before submitting an EOD report."
+
             logger.info(f"Active clock-in session validated for contractor {contractor_id} (user: {slack_user_id}), session: {active_sessions[0].id}")
             return True, contractor_id, None
 

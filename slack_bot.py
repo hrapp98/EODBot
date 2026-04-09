@@ -392,7 +392,7 @@ class SlackBot:
             "submit": {"type": "plain_text", "text": "Submit"},
             "close": {"type": "plain_text", "text": "Cancel"},
             "blocks": blocks,
-            "private_metadata": private_metadata or ""
+            "private_metadata": private_metadata or "{}"
         }
 
     def get_channel_members(self, channel_id):
