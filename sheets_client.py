@@ -280,6 +280,14 @@ class SheetsClient:
                 if not timestamp:
                     continue
 
+                # Handle timestamp stored as string (legacy data) or datetime
+                if isinstance(timestamp, str):
+                    try:
+                        from datetime import datetime as dt
+                        timestamp = dt.fromisoformat(timestamp)
+                    except ValueError:
+                        continue
+
                 submit_date = timestamp.astimezone(
                     ZoneInfo("America/New_York")).date()
                 all_dates.add(submit_date)  # Track this date
@@ -464,6 +472,9 @@ class SheetsClient:
                     f"Timestamp type: {type(timestamp)}, value: {timestamp}")
 
                 try:
+                    if isinstance(timestamp, str):
+                        from datetime import datetime as dt
+                        timestamp = dt.fromisoformat(timestamp)
                     submit_date = timestamp.astimezone(
                         ZoneInfo("America/New_York")).date()
                     logger.info(f"Converted timestamp to date: {submit_date}")
