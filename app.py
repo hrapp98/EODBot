@@ -497,59 +497,42 @@ def slack_interactivity():
                 
                 user_id = payload['user']['id']
                 report_data['user_id'] = user_id  # Add user_id to report_data
-                
-                # Validate active clock-in session before processing EOD (unless it's an edit)
+
+                # Parse metadata for edit detection
                 try:
                     metadata = json.loads(payload['view'].get('private_metadata', '{}'))
                     is_edit = metadata.get('is_edit', False)
-                    
-                    if not is_edit and firebase_client:
-                        is_valid, contractor_id, error_message = firebase_client.validate_clock_in_for_eod(user_id)
-                        if not is_valid:
-                            # Send detailed error message with instructions
-                            full_message = f"⚠️ {error_message}\n\n" \
-                                          f"Please use `/clock-in` to start your shift, then you can submit your EOD.\n\n" \
-                                          f"If you forgot to clock in earlier today, please:\n" \
-                                          f"1. Contact your account manager to note the missed clock-in\n" \
-                                          f"2. Use `/clock-in` now\n" \
-                                          f"3. Then submit your EOD report"
-                            slack_bot.send_message(user_id, full_message)
-                            return jsonify({"response_action": "clear"})
+                    report_id = metadata.get('report_id')
                 except json.JSONDecodeError:
                     logger.warning("Invalid private_metadata JSON, treating as new submission")
                     is_edit = False
-                    
-                    # For new submissions, validate clock-in
-                    if firebase_client:
-                        is_valid, contractor_id, error_message = firebase_client.validate_clock_in_for_eod(user_id)
-                        if not is_valid:
-                            # Send detailed error message with instructions
-                            full_message = f"⚠️ {error_message}\n\n" \
-                                          f"Please use `/clock-in` to start your shift, then you can submit your EOD.\n\n" \
-                                          f"If you forgot to clock in earlier today, please:\n" \
-                                          f"1. Contact your account manager to note the missed clock-in\n" \
-                                          f"2. Use `/clock-in` now\n" \
-                                          f"3. Then submit your EOD report"
-                            slack_bot.send_message(user_id, full_message)
-                            return jsonify({"response_action": "clear"})
-                
-                # Extract metadata for report_id
-                try:
-                    metadata = json.loads(payload['view'].get('private_metadata', '{}'))
-                    report_id = metadata.get('report_id')
-                except json.JSONDecodeError:
                     report_id = None
 
-                # Close the modal immediately
+                # Close the modal immediately — all validation and processing
+                # happens in the background thread to avoid Slack's 3-second timeout
                 response = {"response_action": "clear"}
-                
+
                 # Handle background tasks directly without closure
                 def process_submission():
                     try:
-                        # Save to Firebase
                         nonlocal report_id  # Access the outer scope variable
+
+                        # Validate active clock-in session (unless it's an edit)
+                        if not is_edit and firebase_client:
+                            is_valid, contractor_id, error_message = firebase_client.validate_clock_in_for_eod(user_id)
+                            if not is_valid:
+                                full_message = f"⚠️ {error_message}\n\n" \
+                                              f"Please use `/clock-in` to start your shift, then you can submit your EOD.\n\n" \
+                                              f"If you forgot to clock in earlier today, please:\n" \
+                                              f"1. Contact your account manager to note the missed clock-in\n" \
+                                              f"2. Use `/clock-in` now\n" \
+                                              f"3. Then submit your EOD report"
+                                slack_bot.send_message(user_id, full_message)
+                                return
+
+                        # Save to Firebase
                         saved_report_id = None
-                        
+
                         if is_edit and report_id:
                             firebase_client.update_eod_report(report_id, report_data)
                             saved_report_id = report_id
@@ -557,21 +540,19 @@ def slack_interactivity():
                             saved_report_id = firebase_client.save_eod_report(user_id, report_data)
                             report_id = saved_report_id  # Update the outer scope variable
 
-                        # Update Google Sheets
+                        # Post to channel and confirm to user FIRST (fast, critical)
+                        slack_bot.post_report_to_channel(report_data)
+
+                        action_type = "updated" if is_edit else "submitted"
+                        slack_bot.send_message(user_id, f"Your EOD report has been {action_type} successfully!")
+
+                        # Update Google Sheets LAST (slow, non-critical)
                         if sheets_client and sheets_client.service:
                             try:
                                 sheets_client.update_submissions(report_data)
-                                sheets_client.update_tracker()
                             except Exception as e:
                                 logger.error(f"Error updating sheets: {str(e)}")
 
-                        # Post to channel
-                        slack_bot.post_report_to_channel(report_data)
-                        
-                        # Send confirmation message to user
-                        action_type = "updated" if is_edit else "submitted"
-                        slack_bot.send_message(user_id, f"Your EOD report has been {action_type} successfully!")
-                        
                         # Generate weekly summary if in debug mode
                         try:
                             if Config.DEBUG:
@@ -579,7 +560,7 @@ def slack_interactivity():
                                 logger.info(f"Generated weekly summary after {action_type} (debug mode)")
                         except Exception as e:
                             logger.error(f"Error generating debug weekly summary: {str(e)}")
-                            
+
                     except Exception as e:
                         logger.error(f"Error in background tasks: {str(e)}")
                         slack_bot.send_message(user_id, "There was an error processing your submission. Please try again or contact support.")
@@ -587,7 +568,7 @@ def slack_interactivity():
                 # Start background tasks in a new thread
                 from threading import Thread
                 Thread(target=process_submission).start()
-                
+
                 return jsonify(response)
 
             elif payload['type'] == 'block_actions':

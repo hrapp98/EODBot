@@ -1,4 +1,7 @@
 from slack_sdk import WebClient
+import logging
+
+logger = logging.getLogger(__name__)
 
 class SlackClient:
     def __init__(self, token):
