@@ -37,11 +37,3 @@ run = ["sh", "-c", "PORT=3000 python app.py"]
 [[ports]]
 localPort = 3000
 externalPort = 80
-
-[[ports]]
-localPort = 3100
-externalPort = 3000
-
-[[ports]]
-localPort = 3200
-externalPort = 3001
