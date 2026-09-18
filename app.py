@@ -36,6 +36,38 @@ def requires_auth(f):
         return f(*args, **kwargs)
     return decorated
 
+def requires_slack_signature(f):
+    """Reject requests that aren't signed with our Slack signing secret"""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        timestamp = request.headers.get('X-Slack-Request-Timestamp', '')
+        signature = request.headers.get('X-Slack-Signature', '')
+
+        if not timestamp or not signature:
+            logger.warning(f"Missing Slack verification headers on {request.path}")
+            return jsonify({'error': 'missing_headers'}), 400
+
+        try:
+            if abs(datetime.now().timestamp() - float(timestamp)) > 60 * 5:
+                logger.warning(f"Request timestamp too old on {request.path}")
+                return jsonify({'error': 'invalid_timestamp'}), 403
+        except ValueError:
+            return jsonify({'error': 'invalid_timestamp'}), 403
+
+        # get_data caches the body, so request.form still parses afterwards
+        sig_basestring = f"v0:{timestamp}:{request.get_data(as_text=True)}"
+        my_signature = 'v0=' + hmac.new(
+            Config.SLACK_SIGNING_SECRET.encode(),
+            sig_basestring.encode(),
+            hashlib.sha256
+        ).hexdigest()
+
+        if not hmac.compare_digest(my_signature, signature):
+            logger.warning(f"Invalid request signature on {request.path}")
+            return jsonify({'error': 'invalid_signature'}), 403
+        return f(*args, **kwargs)
+    return decorated
+
 # Set up logging first
 logging.basicConfig(
     level=logging.INFO,
@@ -276,32 +308,10 @@ def dashboard_data():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/slack/events', methods=['POST'])
+@requires_slack_signature
 def slack_events():
     """Handle Slack events"""
     try:
-        # Verify request signature
-        timestamp = request.headers.get('X-Slack-Request-Timestamp', '')
-        signature = request.headers.get('X-Slack-Signature', '')
-        
-        if not timestamp or not signature:
-            logger.warning("Missing Slack verification headers")
-            return jsonify({'error': 'missing_headers'}), 400
-            
-        if abs(datetime.now().timestamp() - float(timestamp)) > 60 * 5:
-            logger.warning("Request timestamp too old")
-            return jsonify({'error': 'invalid_timestamp'}), 403
-            
-        sig_basestring = f"v0:{timestamp}:{request.get_data(as_text=True)}"
-        my_signature = 'v0=' + hmac.new(
-            Config.SLACK_SIGNING_SECRET.encode(),
-            sig_basestring.encode(),
-            hashlib.sha256
-        ).hexdigest()
-        
-        if not hmac.compare_digest(my_signature, signature):
-            logger.warning("Invalid request signature")
-            return jsonify({'error': 'invalid_signature'}), 403
-
         # Parse request data
         if not request.is_json:
             logger.warning("Request is not JSON")
@@ -427,6 +437,7 @@ def handle_eod_submission(event):
         slack_bot.send_error_message(event.get('user'))
 
 @app.route('/slack/commands', methods=['POST'])
+@requires_slack_signature
 def slack_commands():
     """Handle Slack slash commands"""
     try:
@@ -477,6 +488,7 @@ def slack_commands():
         }), 500
 
 @app.route('/slack/interactive-endpoint', methods=['POST'])
+@requires_slack_signature
 def slack_interactivity():
     """Handle Slack interactive components"""
     try:
