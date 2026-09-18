@@ -2,6 +2,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from datetime import datetime, timedelta, date
 import logging
+import os
 from models import EODReport, SubmissionTracker
 from sheets_client import SheetsClient
 from config import Config
@@ -32,6 +33,11 @@ HOLIDAYS = {
 
 def setup_scheduler(app):
     """Initialize and start the scheduler"""
+    # Only one host may own the cron jobs; a second one double-DMs everyone
+    if os.environ.get('EOD_SCHEDULER_ENABLED', '1') != '1':
+        logger.warning("Scheduler disabled (EOD_SCHEDULER_ENABLED != 1)")
+        return None
+
     scheduler = BackgroundScheduler()
     
     # Calculate a time 30 seconds from now for initial run

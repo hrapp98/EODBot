@@ -1,0 +1,17 @@
+.git
+.pythonlibs
+.cache
+.local
+.upm
+.config
+.agents
+.claude
+node_modules
+__pycache__
+.pytest_cache
+attached_assets
+generated-icon.png
+image.png
+backup.dump
+Pasted-*
+*.pyc

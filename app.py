@@ -170,6 +170,11 @@ def login():
             error = 'Incorrect password. Please try again.'
     return render_template('login.html', error=error)
 
+@app.route('/healthz')
+def healthz():
+    """Unauthenticated liveness check for Fly"""
+    return 'ok', 200
+
 @app.route('/logout')
 def logout():
     """Logout and clear session"""
@@ -1799,8 +1804,8 @@ def trigger_daily_report():
 if __name__ == '__main__':
     with app.app_context():
         try:
-            # Initialize internal users
-            initialize_internal_users()
+            # Sync users in the background so the port binds immediately
+            threading.Thread(target=initialize_internal_users, daemon=True).start()
             
             # Import setup_scheduler at the top level of the file
             from scheduler import setup_scheduler
@@ -1825,8 +1830,8 @@ if __name__ == '__main__':
             app.run(
                 host='0.0.0.0',  # Allow external access
                 port=port,
-                debug=True,      # Enable debug mode for auto-reloading
-                use_reloader=True # Explicitly enable reloader
+                debug=False,      # Never expose the Werkzeug debugger publicly
+                use_reloader=False # Reloader re-runs __main__ and duplicates the scheduler
             )
         except Exception as e:
             logger.error(f"Failed to start application: {str(e)}")
